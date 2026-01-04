@@ -2,10 +2,14 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: ["*"]
   pull_request:
-    branches: [main, master]
   workflow_dispatch:
+
+# Cancel in-progress runs when a new commit is pushed
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -224,11 +228,12 @@ jobs:
           fail_ci_if_error: false
 
   # ==========================================================================
-  # All checks passed
+  # All checks passed - THIS IS THE REQUIRED CHECK FOR BRANCH PROTECTION
+  # Set "CI Success" as a required status check in GitHub branch protection
   # ==========================================================================
   ci-success:
     name: CI Success
-    needs: [fmt, clippy, test, msrv, docs, build, security]
+    needs: [fmt, clippy, test, msrv, docs, build, security, coverage]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -240,7 +245,8 @@ jobs:
              [[ "${{ needs.msrv.result }}" != "success" ]] || \
              [[ "${{ needs.docs.result }}" != "success" ]] || \
              [[ "${{ needs.build.result }}" != "success" ]] || \
-             [[ "${{ needs.security.result }}" != "success" ]]; then
+             [[ "${{ needs.security.result }}" != "success" ]] || \
+             [[ "${{ needs.coverage.result }}" != "success" ]]; then
             echo "One or more jobs failed"
             exit 1
           fi
