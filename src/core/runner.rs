@@ -72,7 +72,10 @@ impl RunResult {
     /// Returns the number of passed checks.
     #[must_use]
     pub fn passed_count(&self) -> usize {
-        self.checks.iter().filter(|c| c.passed && !c.skipped).count()
+        self.checks
+            .iter()
+            .filter(|c| c.passed && !c.skipped)
+            .count()
     }
 
     /// Returns the number of failed checks.
@@ -153,9 +156,13 @@ impl Runner {
 
     /// Runs a single check by name.
     pub async fn run_single(&self, name: &str, mode: Mode) -> Result<CheckResult> {
-        let check = self.config.checks.get(name).ok_or_else(|| Error::CheckNotFound {
-            name: name.to_string(),
-        })?;
+        let check = self
+            .config
+            .checks
+            .get(name)
+            .ok_or_else(|| Error::CheckNotFound {
+                name: name.to_string(),
+            })?;
 
         self.run_check(name, check, mode).await
     }
@@ -258,7 +265,7 @@ impl Runner {
                         return Err(Error::Internal {
                             message: format!("Task join error: {e}"),
                         });
-                    }
+                    },
                 }
             }
 
@@ -404,45 +411,157 @@ mod num_cpus {
 mod tests {
     use super::*;
 
+    // =========================================================================
+    // Helper functions for tests
+    // =========================================================================
+
+    fn make_passed_check(name: &str) -> CheckResult {
+        CheckResult {
+            name: name.to_string(),
+            passed: true,
+            output: CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+                timed_out: false,
+                duration: Duration::ZERO,
+            },
+            skipped: false,
+            skip_reason: None,
+        }
+    }
+
+    fn make_failed_check(name: &str) -> CheckResult {
+        CheckResult {
+            name: name.to_string(),
+            passed: false,
+            output: CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "Error".to_string(),
+                timed_out: false,
+                duration: Duration::ZERO,
+            },
+            skipped: false,
+            skip_reason: None,
+        }
+    }
+
+    fn make_skipped_check(name: &str) -> CheckResult {
+        CheckResult::skipped(name.to_string(), "Condition not met".to_string())
+    }
+
+    // =========================================================================
+    // parse_duration tests
+    // =========================================================================
+
     #[test]
-    fn test_parse_duration() {
+    fn test_parse_duration_seconds() {
         assert_eq!(parse_duration("30s"), Some(Duration::from_secs(30)));
-        assert_eq!(parse_duration("5m"), Some(Duration::from_secs(300)));
-        assert_eq!(parse_duration("1h"), Some(Duration::from_secs(3600)));
-        assert_eq!(parse_duration("invalid"), None);
+        assert_eq!(parse_duration("1s"), Some(Duration::from_secs(1)));
+        assert_eq!(parse_duration("0s"), Some(Duration::from_secs(0)));
     }
 
     #[test]
-    fn test_run_result_success() {
+    fn test_parse_duration_minutes() {
+        assert_eq!(parse_duration("5m"), Some(Duration::from_secs(300)));
+        assert_eq!(parse_duration("1m"), Some(Duration::from_secs(60)));
+        assert_eq!(parse_duration("15m"), Some(Duration::from_secs(900)));
+    }
+
+    #[test]
+    fn test_parse_duration_hours() {
+        assert_eq!(parse_duration("1h"), Some(Duration::from_secs(3600)));
+        assert_eq!(parse_duration("2h"), Some(Duration::from_secs(7200)));
+    }
+
+    #[test]
+    fn test_parse_duration_complex() {
+        assert_eq!(parse_duration("1h30m"), Some(Duration::from_secs(5400)));
+        assert_eq!(parse_duration("1m30s"), Some(Duration::from_secs(90)));
+    }
+
+    #[test]
+    fn test_parse_duration_invalid() {
+        assert_eq!(parse_duration("invalid"), None);
+        assert_eq!(parse_duration(""), None);
+        assert_eq!(parse_duration("abc123"), None);
+    }
+
+    // =========================================================================
+    // CheckResult tests
+    // =========================================================================
+
+    #[test]
+    fn test_check_result_skipped() {
+        let result = CheckResult::skipped("test".to_string(), "reason".to_string());
+        assert!(result.passed);
+        assert!(result.skipped);
+        assert_eq!(result.skip_reason, Some("reason".to_string()));
+        assert_eq!(result.output.exit_code, 0);
+        assert!(!result.output.timed_out);
+    }
+
+    #[test]
+    fn test_check_result_debug() {
+        let result = make_passed_check("test");
+        let debug_str = format!("{:?}", result);
+        assert!(debug_str.contains("test"));
+    }
+
+    // =========================================================================
+    // RunResult tests
+    // =========================================================================
+
+    #[test]
+    fn test_run_result_success_all_passed() {
+        let result = RunResult {
+            mode: Mode::Human,
+            checks: vec![make_passed_check("test1"), make_passed_check("test2")],
+            duration: Duration::ZERO,
+        };
+
+        assert!(result.success());
+        assert_eq!(result.passed_count(), 2);
+        assert_eq!(result.failed_count(), 0);
+        assert_eq!(result.skipped_count(), 0);
+    }
+
+    #[test]
+    fn test_run_result_failure_one_failed() {
+        let result = RunResult {
+            mode: Mode::Agent,
+            checks: vec![make_passed_check("test1"), make_failed_check("test2")],
+            duration: Duration::ZERO,
+        };
+
+        assert!(!result.success());
+        assert_eq!(result.passed_count(), 1);
+        assert_eq!(result.failed_count(), 1);
+        assert_eq!(result.skipped_count(), 0);
+    }
+
+    #[test]
+    fn test_run_result_all_failed() {
+        let result = RunResult {
+            mode: Mode::Human,
+            checks: vec![make_failed_check("test1"), make_failed_check("test2")],
+            duration: Duration::ZERO,
+        };
+
+        assert!(!result.success());
+        assert_eq!(result.passed_count(), 0);
+        assert_eq!(result.failed_count(), 2);
+    }
+
+    #[test]
+    fn test_run_result_with_skipped_checks() {
         let result = RunResult {
             mode: Mode::Human,
             checks: vec![
-                CheckResult {
-                    name: "test1".to_string(),
-                    passed: true,
-                    output: CommandOutput {
-                        exit_code: 0,
-                        stdout: String::new(),
-                        stderr: String::new(),
-                        timed_out: false,
-                        duration: Duration::ZERO,
-                    },
-                    skipped: false,
-                    skip_reason: None,
-                },
-                CheckResult {
-                    name: "test2".to_string(),
-                    passed: true,
-                    output: CommandOutput {
-                        exit_code: 0,
-                        stdout: String::new(),
-                        stderr: String::new(),
-                        timed_out: false,
-                        duration: Duration::ZERO,
-                    },
-                    skipped: false,
-                    skip_reason: None,
-                },
+                make_passed_check("test1"),
+                make_skipped_check("test2"),
+                make_passed_check("test3"),
             ],
             duration: Duration::ZERO,
         };
@@ -450,45 +569,173 @@ mod tests {
         assert!(result.success());
         assert_eq!(result.passed_count(), 2);
         assert_eq!(result.failed_count(), 0);
+        assert_eq!(result.skipped_count(), 1);
     }
 
     #[test]
-    fn test_run_result_failure() {
+    fn test_run_result_all_skipped() {
+        let result = RunResult {
+            mode: Mode::Human,
+            checks: vec![make_skipped_check("test1"), make_skipped_check("test2")],
+            duration: Duration::ZERO,
+        };
+
+        assert!(result.success());
+        assert_eq!(result.passed_count(), 0);
+        assert_eq!(result.failed_count(), 0);
+        assert_eq!(result.skipped_count(), 2);
+    }
+
+    #[test]
+    fn test_run_result_empty_checks() {
+        let result = RunResult {
+            mode: Mode::Human,
+            checks: vec![],
+            duration: Duration::ZERO,
+        };
+
+        assert!(result.success());
+        assert_eq!(result.passed_count(), 0);
+        assert_eq!(result.failed_count(), 0);
+        assert_eq!(result.skipped_count(), 0);
+    }
+
+    #[test]
+    fn test_run_result_failed_checks_iterator() {
         let result = RunResult {
             mode: Mode::Agent,
             checks: vec![
-                CheckResult {
-                    name: "test1".to_string(),
-                    passed: true,
-                    output: CommandOutput {
-                        exit_code: 0,
-                        stdout: String::new(),
-                        stderr: String::new(),
-                        timed_out: false,
-                        duration: Duration::ZERO,
-                    },
-                    skipped: false,
-                    skip_reason: None,
-                },
-                CheckResult {
-                    name: "test2".to_string(),
-                    passed: false,
-                    output: CommandOutput {
-                        exit_code: 1,
-                        stdout: String::new(),
-                        stderr: "Error".to_string(),
-                        timed_out: false,
-                        duration: Duration::ZERO,
-                    },
-                    skipped: false,
-                    skip_reason: None,
-                },
+                make_passed_check("pass1"),
+                make_failed_check("fail1"),
+                make_passed_check("pass2"),
+                make_failed_check("fail2"),
             ],
             duration: Duration::ZERO,
         };
 
-        assert!(!result.success());
-        assert_eq!(result.passed_count(), 1);
-        assert_eq!(result.failed_count(), 1);
+        let failed: Vec<_> = result.failed_checks().collect();
+        assert_eq!(failed.len(), 2);
+        assert_eq!(failed[0].name, "fail1");
+        assert_eq!(failed[1].name, "fail2");
+    }
+
+    #[test]
+    fn test_run_result_mode_preserved() {
+        let human_result = RunResult {
+            mode: Mode::Human,
+            checks: vec![],
+            duration: Duration::ZERO,
+        };
+        assert_eq!(human_result.mode, Mode::Human);
+
+        let agent_result = RunResult {
+            mode: Mode::Agent,
+            checks: vec![],
+            duration: Duration::ZERO,
+        };
+        assert_eq!(agent_result.mode, Mode::Agent);
+
+        let ci_result = RunResult {
+            mode: Mode::Ci,
+            checks: vec![],
+            duration: Duration::ZERO,
+        };
+        assert_eq!(ci_result.mode, Mode::Ci);
+    }
+
+    #[test]
+    fn test_run_result_duration_preserved() {
+        let result = RunResult {
+            mode: Mode::Human,
+            checks: vec![],
+            duration: Duration::from_secs(42),
+        };
+        assert_eq!(result.duration, Duration::from_secs(42));
+    }
+
+    // =========================================================================
+    // Runner tests
+    // =========================================================================
+
+    #[test]
+    fn test_runner_new() {
+        let config = Config::default();
+        let runner = Runner::new(config);
+        let debug_str = format!("{:?}", runner);
+        assert!(debug_str.contains("Runner"));
+    }
+
+    #[test]
+    fn test_runner_with_config() {
+        let config = Config::for_preset("rust");
+        let runner = Runner::new(config);
+        let debug_str = format!("{:?}", runner);
+        assert!(debug_str.contains("Runner"));
+    }
+
+    // =========================================================================
+    // check_enabled tests
+    // =========================================================================
+
+    #[test]
+    fn test_check_enabled_no_condition() {
+        let check = CheckConfig {
+            run: "echo test".to_string(),
+            description: "test".to_string(),
+            enabled_if: None,
+            env: HashMap::new(),
+        };
+        assert!(check_enabled(&check, None));
+    }
+
+    #[test]
+    fn test_check_enabled_with_empty_condition() {
+        let check = CheckConfig {
+            run: "echo test".to_string(),
+            description: "test".to_string(),
+            enabled_if: Some(crate::config::EnabledCondition::default()),
+            env: HashMap::new(),
+        };
+        assert!(check_enabled(&check, None));
+    }
+
+    #[test]
+    fn test_check_enabled_command_exists() {
+        let check = CheckConfig {
+            run: "echo test".to_string(),
+            description: "test".to_string(),
+            enabled_if: Some(crate::config::EnabledCondition {
+                file_exists: None,
+                dir_exists: None,
+                command_exists: Some("sh".to_string()),
+            }),
+            env: HashMap::new(),
+        };
+        assert!(check_enabled(&check, None));
+    }
+
+    #[test]
+    fn test_check_enabled_command_not_exists() {
+        let check = CheckConfig {
+            run: "echo test".to_string(),
+            description: "test".to_string(),
+            enabled_if: Some(crate::config::EnabledCondition {
+                file_exists: None,
+                dir_exists: None,
+                command_exists: Some("definitely_not_a_command_12345".to_string()),
+            }),
+            env: HashMap::new(),
+        };
+        assert!(!check_enabled(&check, None));
+    }
+
+    // =========================================================================
+    // num_cpus tests
+    // =========================================================================
+
+    #[test]
+    fn test_num_cpus_get() {
+        let cpus = num_cpus::get();
+        assert!(cpus >= 1);
     }
 }

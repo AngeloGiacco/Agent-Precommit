@@ -120,15 +120,9 @@ impl Executor {
 
         // Determine shell
         let (shell, shell_arg) = if cfg!(windows) {
-            (
-                options.shell.as_deref().unwrap_or("cmd"),
-                "/C",
-            )
+            (options.shell.as_deref().unwrap_or("cmd"), "/C")
         } else {
-            (
-                options.shell.as_deref().unwrap_or("sh"),
-                "-c",
-            )
+            (options.shell.as_deref().unwrap_or("sh"), "-c")
         };
 
         // Build command
@@ -162,7 +156,8 @@ impl Executor {
         // Handle timeout
         let result = if let Some(timeout_duration) = options.timeout {
             match timeout(timeout_duration, async {
-                self.wait_for_output(&mut child, options.capture_output).await
+                self.wait_for_output(&mut child, options.capture_output)
+                    .await
             })
             .await
             {
@@ -177,7 +172,7 @@ impl Executor {
                         timed_out: true,
                         duration: start.elapsed(),
                     });
-                }
+                },
             }
         } else {
             self.wait_for_output(&mut child, options.capture_output)
@@ -229,22 +224,24 @@ impl Executor {
                 output
             });
 
-            let status = child.wait().await.map_err(|e| Error::io("wait for command", e))?;
+            let status = child
+                .wait()
+                .await
+                .map_err(|e| Error::io("wait for command", e))?;
 
-            let stdout = stdout_handle
-                .await
-                .map_err(|e| Error::Internal {
-                    message: format!("stdout task failed: {e}"),
-                })?;
-            let stderr = stderr_handle
-                .await
-                .map_err(|e| Error::Internal {
-                    message: format!("stderr task failed: {e}"),
-                })?;
+            let stdout = stdout_handle.await.map_err(|e| Error::Internal {
+                message: format!("stdout task failed: {e}"),
+            })?;
+            let stderr = stderr_handle.await.map_err(|e| Error::Internal {
+                message: format!("stderr task failed: {e}"),
+            })?;
 
             Ok((status.code().unwrap_or(1), stdout, stderr))
         } else {
-            let status = child.wait().await.map_err(|e| Error::io("wait for command", e))?;
+            let status = child
+                .wait()
+                .await
+                .map_err(|e| Error::io("wait for command", e))?;
             Ok((status.code().unwrap_or(1), String::new(), String::new()))
         }
     }
@@ -259,6 +256,176 @@ impl Executor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // =========================================================================
+    // CommandOutput tests
+    // =========================================================================
+
+    #[test]
+    fn test_command_output_success() {
+        let output = CommandOutput {
+            exit_code: 0,
+            stdout: "test".to_string(),
+            stderr: String::new(),
+            timed_out: false,
+            duration: Duration::from_secs(1),
+        };
+        assert!(output.success());
+    }
+
+    #[test]
+    fn test_command_output_failure_exit_code() {
+        let output = CommandOutput {
+            exit_code: 1,
+            stdout: String::new(),
+            stderr: "error".to_string(),
+            timed_out: false,
+            duration: Duration::from_secs(1),
+        };
+        assert!(!output.success());
+    }
+
+    #[test]
+    fn test_command_output_failure_timeout() {
+        let output = CommandOutput {
+            exit_code: 0,
+            stdout: String::new(),
+            stderr: String::new(),
+            timed_out: true,
+            duration: Duration::from_secs(1),
+        };
+        assert!(!output.success());
+    }
+
+    #[test]
+    fn test_command_output_combined_output_stdout_only() {
+        let output = CommandOutput {
+            exit_code: 0,
+            stdout: "stdout content".to_string(),
+            stderr: String::new(),
+            timed_out: false,
+            duration: Duration::from_secs(1),
+        };
+        assert_eq!(output.combined_output(), "stdout content");
+    }
+
+    #[test]
+    fn test_command_output_combined_output_stderr_only() {
+        let output = CommandOutput {
+            exit_code: 0,
+            stdout: String::new(),
+            stderr: "stderr content".to_string(),
+            timed_out: false,
+            duration: Duration::from_secs(1),
+        };
+        assert_eq!(output.combined_output(), "stderr content");
+    }
+
+    #[test]
+    fn test_command_output_combined_output_both() {
+        let output = CommandOutput {
+            exit_code: 0,
+            stdout: "stdout".to_string(),
+            stderr: "stderr".to_string(),
+            timed_out: false,
+            duration: Duration::from_secs(1),
+        };
+        let combined = output.combined_output();
+        assert!(combined.contains("stdout"));
+        assert!(combined.contains("stderr"));
+    }
+
+    #[test]
+    fn test_command_output_combined_output_empty() {
+        let output = CommandOutput {
+            exit_code: 0,
+            stdout: String::new(),
+            stderr: String::new(),
+            timed_out: false,
+            duration: Duration::from_secs(1),
+        };
+        assert!(output.combined_output().is_empty());
+    }
+
+    // =========================================================================
+    // ExecuteOptions tests
+    // =========================================================================
+
+    #[test]
+    fn test_execute_options_default() {
+        let options = ExecuteOptions::default();
+        assert!(options.cwd.is_none());
+        assert!(options.timeout.is_some());
+        assert_eq!(options.timeout, Some(Duration::from_secs(300)));
+        assert!(options.env.is_empty());
+        assert!(options.capture_output);
+        assert!(options.shell.is_none());
+    }
+
+    #[test]
+    fn test_execute_options_cwd() {
+        let options = ExecuteOptions::default().cwd("/tmp");
+        assert_eq!(options.cwd, Some(std::path::PathBuf::from("/tmp")));
+    }
+
+    #[test]
+    fn test_execute_options_timeout() {
+        let options = ExecuteOptions::default().timeout(Duration::from_secs(60));
+        assert_eq!(options.timeout, Some(Duration::from_secs(60)));
+    }
+
+    #[test]
+    fn test_execute_options_env() {
+        let options = ExecuteOptions::default()
+            .env("KEY1", "VALUE1")
+            .env("KEY2", "VALUE2");
+        assert_eq!(options.env.len(), 2);
+        assert!(options
+            .env
+            .contains(&("KEY1".to_string(), "VALUE1".to_string())));
+        assert!(options
+            .env
+            .contains(&("KEY2".to_string(), "VALUE2".to_string())));
+    }
+
+    #[test]
+    fn test_execute_options_capture_output() {
+        let options = ExecuteOptions::default().capture_output(false);
+        assert!(!options.capture_output);
+    }
+
+    #[test]
+    fn test_execute_options_chaining() {
+        let options = ExecuteOptions::default()
+            .cwd("/tmp")
+            .timeout(Duration::from_secs(60))
+            .env("TEST", "value")
+            .capture_output(false);
+
+        assert_eq!(options.cwd, Some(std::path::PathBuf::from("/tmp")));
+        assert_eq!(options.timeout, Some(Duration::from_secs(60)));
+        assert_eq!(options.env.len(), 1);
+        assert!(!options.capture_output);
+    }
+
+    // =========================================================================
+    // Executor tests
+    // =========================================================================
+
+    #[test]
+    fn test_executor_new() {
+        let executor = Executor::new();
+        // Verify we can create an executor
+        let debug_str = format!("{:?}", executor);
+        assert!(debug_str.contains("Executor"));
+    }
+
+    #[test]
+    fn test_executor_default() {
+        let executor = Executor::default();
+        let debug_str = format!("{:?}", executor);
+        assert!(debug_str.contains("Executor"));
+    }
 
     #[tokio::test]
     async fn test_execute_simple_command() {
@@ -276,14 +443,69 @@ mod tests {
     #[tokio::test]
     async fn test_execute_failing_command() {
         let executor = Executor::new();
-        let result = executor
-            .execute("exit 1", ExecuteOptions::default())
-            .await;
+        let result = executor.execute("exit 1", ExecuteOptions::default()).await;
 
         assert!(result.is_ok());
         let output = result.expect("should complete");
         assert!(!output.success());
         assert_eq!(output.exit_code, 1);
+    }
+
+    #[tokio::test]
+    async fn test_execute_various_exit_codes() {
+        let executor = Executor::new();
+
+        for exit_code in [0, 1, 2, 42, 127] {
+            let result = executor
+                .execute(&format!("exit {}", exit_code), ExecuteOptions::default())
+                .await;
+
+            assert!(result.is_ok());
+            let output = result.expect("should complete");
+            assert_eq!(output.exit_code, exit_code);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_execute_with_stderr() {
+        let executor = Executor::new();
+        let result = executor
+            .execute("echo error >&2", ExecuteOptions::default())
+            .await;
+
+        assert!(result.is_ok());
+        let output = result.expect("should succeed");
+        assert!(output.success());
+        assert!(output.stderr.contains("error"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_with_environment_variable() {
+        let executor = Executor::new();
+        let result = executor
+            .execute(
+                "echo $TEST_VAR",
+                ExecuteOptions::default().env("TEST_VAR", "test_value"),
+            )
+            .await;
+
+        assert!(result.is_ok());
+        let output = result.expect("should succeed");
+        assert!(output.success());
+        assert!(output.stdout.contains("test_value"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_with_working_directory() {
+        let executor = Executor::new();
+        let result = executor
+            .execute("pwd", ExecuteOptions::default().cwd("/tmp"))
+            .await;
+
+        assert!(result.is_ok());
+        let output = result.expect("should succeed");
+        assert!(output.success());
+        assert!(output.stdout.contains("/tmp") || output.stdout.contains("tmp"));
     }
 
     #[tokio::test]
@@ -302,16 +524,58 @@ mod tests {
         assert_eq!(output.exit_code, 124);
     }
 
+    #[tokio::test]
+    async fn test_execute_duration_is_recorded() {
+        let executor = Executor::new();
+        let result = executor
+            .execute("sleep 0.1", ExecuteOptions::default())
+            .await;
+
+        assert!(result.is_ok());
+        let output = result.expect("should succeed");
+        assert!(output.duration >= Duration::from_millis(50));
+    }
+
+    #[tokio::test]
+    async fn test_execute_multiline_output() {
+        let executor = Executor::new();
+        let result = executor
+            .execute(
+                "echo line1; echo line2; echo line3",
+                ExecuteOptions::default(),
+            )
+            .await;
+
+        assert!(result.is_ok());
+        let output = result.expect("should succeed");
+        assert!(output.success());
+        assert!(output.stdout.contains("line1"));
+        assert!(output.stdout.contains("line2"));
+        assert!(output.stdout.contains("line3"));
+    }
+
     #[test]
     fn test_command_exists() {
         // 'sh' should exist on Unix, 'cmd' on Windows
         if cfg!(unix) {
             assert!(Executor::command_exists("sh"));
+            assert!(Executor::command_exists("echo"));
         } else {
             assert!(Executor::command_exists("cmd"));
         }
 
         // This should not exist
-        assert!(!Executor::command_exists("definitely_not_a_real_command_12345"));
+        assert!(!Executor::command_exists(
+            "definitely_not_a_real_command_12345"
+        ));
+    }
+
+    #[test]
+    fn test_command_exists_common_tools() {
+        // These should exist on most systems
+        if cfg!(unix) {
+            assert!(Executor::command_exists("ls"));
+            assert!(Executor::command_exists("cat"));
+        }
     }
 }

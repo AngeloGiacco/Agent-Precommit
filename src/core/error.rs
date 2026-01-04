@@ -219,9 +219,9 @@ impl Error {
         match self {
             Self::CheckFailed { exit_code, .. } => exit_code.unwrap_or(1),
             Self::CheckTimeout { .. } => 124, // Standard timeout exit code
-            Self::ConfigNotFound { .. }
-            | Self::ConfigParse { .. }
-            | Self::ConfigInvalid { .. } => 78, // EX_CONFIG
+            Self::ConfigNotFound { .. } | Self::ConfigParse { .. } | Self::ConfigInvalid { .. } => {
+                78
+            }, // EX_CONFIG
             Self::NotGitRepo | Self::GitOperation { .. } | Self::GitHooksDir => 65, // EX_DATAERR
             _ => 1,
         }

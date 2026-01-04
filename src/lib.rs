@@ -25,11 +25,11 @@
 //!
 //!     // Detect mode (human, agent, or ci)
 //!     let detector = Detector::new(&config);
-//!     let mode = detector.detect();
+//!     let detection = detector.detect();
 //!
 //!     // Run appropriate checks
 //!     let runner = Runner::new(config);
-//!     let result = runner.run(mode).await?;
+//!     let result = runner.run(detection.mode).await?;
 //!
 //!     if result.success() {
 //!         Ok(())
@@ -52,4 +52,4 @@ pub mod presets;
 pub use config::Config;
 pub use core::detector::{Detector, Mode};
 pub use core::error::{Error, Result};
-pub use core::runner::{CheckResult, Runner, RunResult};
+pub use core::runner::{CheckResult, RunResult, Runner};
