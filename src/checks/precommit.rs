@@ -65,13 +65,157 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
+    // =========================================================================
+    // Constants tests
+    // =========================================================================
+
     #[test]
-    fn test_config_exists() {
+    fn test_pre_commit_config_constant() {
+        assert_eq!(PRE_COMMIT_CONFIG, ".pre-commit-config.yaml");
+    }
+
+    // =========================================================================
+    // config_exists tests
+    // =========================================================================
+
+    #[test]
+    fn test_config_exists_no_file() {
         let temp = TempDir::new().expect("create temp dir");
         assert!(!config_exists(temp.path()));
+    }
 
-        std::fs::write(temp.path().join(PRE_COMMIT_CONFIG), "repos: []")
-            .expect("write config");
+    #[test]
+    fn test_config_exists_with_file() {
+        let temp = TempDir::new().expect("create temp dir");
+        std::fs::write(temp.path().join(PRE_COMMIT_CONFIG), "repos: []").expect("write config");
         assert!(config_exists(temp.path()));
+    }
+
+    #[test]
+    fn test_config_exists_empty_file() {
+        let temp = TempDir::new().expect("create temp dir");
+        std::fs::write(temp.path().join(PRE_COMMIT_CONFIG), "").expect("write empty config");
+        assert!(config_exists(temp.path()));
+    }
+
+    #[test]
+    fn test_config_exists_valid_yaml() {
+        let temp = TempDir::new().expect("create temp dir");
+        std::fs::write(
+            temp.path().join(PRE_COMMIT_CONFIG),
+            r#"
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: trailing-whitespace
+"#,
+        )
+        .expect("write yaml config");
+        assert!(config_exists(temp.path()));
+    }
+
+    // =========================================================================
+    // is_installed tests
+    // =========================================================================
+
+    #[test]
+    fn test_is_installed_returns_bool() {
+        // This test just verifies the function runs without error
+        // Result depends on whether pre-commit is installed on the system
+        let _ = is_installed();
+    }
+
+    // =========================================================================
+    // run_with_args tests (via async tests)
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_run_staged_without_precommit() {
+        // Skip this test if pre-commit is installed
+        if is_installed() {
+            return;
+        }
+
+        let temp = TempDir::new().expect("create temp dir");
+        std::fs::write(temp.path().join(PRE_COMMIT_CONFIG), "repos: []").expect("write config");
+
+        let result = run_staged(temp.path()).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, Error::PreCommitNotFound));
+    }
+
+    #[tokio::test]
+    async fn test_run_all_without_precommit() {
+        // Skip this test if pre-commit is installed
+        if is_installed() {
+            return;
+        }
+
+        let temp = TempDir::new().expect("create temp dir");
+        std::fs::write(temp.path().join(PRE_COMMIT_CONFIG), "repos: []").expect("write config");
+
+        let result = run_all(temp.path()).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, Error::PreCommitNotFound));
+    }
+
+    #[tokio::test]
+    async fn test_run_staged_without_config() {
+        // This test requires pre-commit to be installed
+        if !is_installed() {
+            return;
+        }
+
+        let temp = TempDir::new().expect("create temp dir");
+        // Don't create config file
+
+        let result = run_staged(temp.path()).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, Error::PreCommitConfigNotFound { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_run_all_without_config() {
+        // This test requires pre-commit to be installed
+        if !is_installed() {
+            return;
+        }
+
+        let temp = TempDir::new().expect("create temp dir");
+        // Don't create config file
+
+        let result = run_all(temp.path()).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, Error::PreCommitConfigNotFound { .. }));
+    }
+
+    // =========================================================================
+    // Edge case tests
+    // =========================================================================
+
+    #[test]
+    fn test_config_exists_in_nested_dir() {
+        let temp = TempDir::new().expect("create temp dir");
+        let nested = temp.path().join("nested/dir");
+        std::fs::create_dir_all(&nested).expect("create nested dir");
+
+        // Config in nested dir
+        std::fs::write(nested.join(PRE_COMMIT_CONFIG), "repos: []").expect("write config");
+
+        // Should find config in nested, not in root
+        assert!(!config_exists(temp.path()));
+        assert!(config_exists(&nested));
+    }
+
+    #[test]
+    fn test_config_path_construction() {
+        let temp = TempDir::new().expect("create temp dir");
+        let expected_path = temp.path().join(PRE_COMMIT_CONFIG);
+        assert!(expected_path.ends_with(".pre-commit-config.yaml"));
     }
 }

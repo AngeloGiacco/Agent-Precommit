@@ -9,6 +9,6 @@ fn main() -> ExitCode {
         Err(e) => {
             eprintln!("Error: {e}");
             ExitCode::FAILURE
-        }
+        },
     }
 }

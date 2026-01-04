@@ -161,7 +161,7 @@ pub fn run() -> Result<ExitCode> {
         Some(Commands::Uninstall) => commands::uninstall(),
         Some(Commands::Run { mode, check, all }) => {
             commands::run(mode.as_deref(), check.as_deref(), all)
-        }
+        },
         Some(Commands::Detect) => commands::detect(),
         Some(Commands::List { mode }) => commands::list(mode.as_deref()),
         Some(Commands::Validate) => commands::validate(),
@@ -169,7 +169,7 @@ pub fn run() -> Result<ExitCode> {
         Some(Commands::Completions { shell }) => {
             commands::completions(shell);
             Ok(ExitCode::SUCCESS)
-        }
+        },
         None => commands::run(None, None, false),
     }
 }
@@ -184,8 +184,7 @@ fn setup_logging(verbose: bool, quiet: bool) {
         "info"
     };
 
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(filter));
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(filter));
 
     tracing_subscriber::fmt()
         .with_env_filter(env_filter)
@@ -200,14 +199,14 @@ fn setup_color(choice: ColorChoice) {
         ColorChoice::Always => {
             console::set_colors_enabled(true);
             console::set_colors_enabled_stderr(true);
-        }
+        },
         ColorChoice::Never => {
             console::set_colors_enabled(false);
             console::set_colors_enabled_stderr(false);
-        }
+        },
         ColorChoice::Auto => {
             // Let console crate auto-detect
-        }
+        },
     }
 }
 

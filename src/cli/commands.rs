@@ -56,22 +56,17 @@ pub fn init(preset: Option<&str>, force: bool) -> Result<ExitCode> {
                 );
             }
             config
-        }
+        },
     };
 
     // Write config
-    let toml = toml::to_string_pretty(&config)
-        .map_err(|e| Error::Internal {
-            message: format!("Failed to serialize config: {e}"),
-        })?;
+    let toml = toml::to_string_pretty(&config).map_err(|e| Error::Internal {
+        message: format!("Failed to serialize config: {e}"),
+    })?;
 
     std::fs::write(&config_path, toml).map_err(|e| Error::io("write config", e))?;
 
-    eprintln!(
-        "{} Created {}",
-        style("✓").green(),
-        config_path.display()
-    );
+    eprintln!("{} Created {}", style("✓").green(), config_path.display());
 
     if let Some(p) = preset {
         eprintln!("  Using preset: {p}");
@@ -162,8 +157,7 @@ pub fn uninstall() -> Result<ExitCode> {
     }
 
     // Check if it's our hook
-    let content =
-        std::fs::read_to_string(&hook_path).map_err(|e| Error::io("read hook", e))?;
+    let content = std::fs::read_to_string(&hook_path).map_err(|e| Error::io("read hook", e))?;
 
     if !content.contains(HOOK_MARKER) {
         eprintln!(
@@ -299,7 +293,8 @@ pub fn detect() -> Result<ExitCode> {
     }
 
     eprintln!();
-    eprintln!("TTY: stdin={}, stdout={}",
+    eprintln!(
+        "TTY: stdin={}, stdout={}",
         std::io::stdin().is_terminal(),
         std::io::stdout().is_terminal()
     );
@@ -311,13 +306,13 @@ pub fn detect() -> Result<ExitCode> {
 pub fn list(mode: Option<&str>) -> Result<ExitCode> {
     let config = Config::load_or_default()?;
 
-    let mode: Option<Mode> = mode
-        .map(|m| m.parse())
-        .transpose()
-        .map_err(|e: String| Error::ConfigInvalid {
-            field: "mode".to_string(),
-            message: e,
-        })?;
+    let mode: Option<Mode> =
+        mode.map(|m| m.parse())
+            .transpose()
+            .map_err(|e: String| Error::ConfigInvalid {
+                field: "mode".to_string(),
+                message: e,
+            })?;
 
     // Print checks by mode
     if mode.is_none() || mode == Some(Mode::Human) {
@@ -352,18 +347,16 @@ fn print_check(config: &Config, name: &str) {
 /// Validate configuration.
 pub fn validate() -> Result<ExitCode> {
     match Config::load() {
-        Ok(config) => {
-            match config.validate() {
-                Ok(()) => {
-                    eprintln!("{} Configuration is valid", style("✓").green());
-                    Ok(ExitCode::SUCCESS)
-                }
-                Err(e) => {
-                    eprintln!("{} Configuration validation failed: {e}", style("✗").red());
-                    Ok(ExitCode::FAILURE)
-                }
-            }
-        }
+        Ok(config) => match config.validate() {
+            Ok(()) => {
+                eprintln!("{} Configuration is valid", style("✓").green());
+                Ok(ExitCode::SUCCESS)
+            },
+            Err(e) => {
+                eprintln!("{} Configuration validation failed: {e}", style("✗").red());
+                Ok(ExitCode::FAILURE)
+            },
+        },
         Err(Error::ConfigNotFound { path }) => {
             eprintln!(
                 "{} Configuration not found: {}",
@@ -372,11 +365,11 @@ pub fn validate() -> Result<ExitCode> {
             );
             eprintln!("  Run: apc init");
             Ok(ExitCode::FAILURE)
-        }
+        },
         Err(e) => {
             eprintln!("{} Failed to load configuration: {e}", style("✗").red());
             Ok(ExitCode::FAILURE)
-        }
+        },
     }
 }
 
@@ -396,15 +389,12 @@ pub fn config(raw: bool) -> Result<ExitCode> {
             }
 
             Ok(ExitCode::SUCCESS)
-        }
+        },
         Err(Error::ConfigNotFound { .. }) => {
-            eprintln!(
-                "{} No configuration file found",
-                style("!").yellow()
-            );
+            eprintln!("{} No configuration file found", style("!").yellow());
             eprintln!("  Run: apc init");
             Ok(ExitCode::FAILURE)
-        }
+        },
         Err(e) => Err(e),
     }
 }

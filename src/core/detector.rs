@@ -303,11 +303,22 @@ impl<'a> Detector<'a> {
 mod tests {
     use super::*;
 
+    // =========================================================================
+    // Mode tests
+    // =========================================================================
+
     #[test]
     fn test_mode_display() {
         assert_eq!(Mode::Human.to_string(), "human");
         assert_eq!(Mode::Agent.to_string(), "agent");
         assert_eq!(Mode::Ci.to_string(), "ci");
+    }
+
+    #[test]
+    fn test_mode_name() {
+        assert_eq!(Mode::Human.name(), "human");
+        assert_eq!(Mode::Agent.name(), "agent");
+        assert_eq!(Mode::Ci.name(), "ci");
     }
 
     #[test]
@@ -319,6 +330,23 @@ mod tests {
     }
 
     #[test]
+    fn test_mode_parse_case_insensitive() {
+        assert_eq!("Human".parse::<Mode>().ok(), Some(Mode::Human));
+        assert_eq!("HUMAN".parse::<Mode>().ok(), Some(Mode::Human));
+        assert_eq!("agent".parse::<Mode>().ok(), Some(Mode::Agent));
+        assert_eq!("Agent".parse::<Mode>().ok(), Some(Mode::Agent));
+        assert_eq!("ci".parse::<Mode>().ok(), Some(Mode::Ci));
+        assert_eq!("Ci".parse::<Mode>().ok(), Some(Mode::Ci));
+    }
+
+    #[test]
+    fn test_mode_parse_error_message() {
+        let err = "invalid".parse::<Mode>().unwrap_err();
+        assert!(err.contains("Invalid mode"));
+        assert!(err.contains("human, agent, or ci"));
+    }
+
+    #[test]
     fn test_mode_is_thorough() {
         assert!(!Mode::Human.is_thorough());
         assert!(Mode::Agent.is_thorough());
@@ -326,8 +354,183 @@ mod tests {
     }
 
     #[test]
-    fn test_detection_reason_display() {
+    fn test_mode_default() {
+        assert_eq!(Mode::default(), Mode::Human);
+    }
+
+    #[test]
+    fn test_mode_clone() {
+        let mode = Mode::Agent;
+        let cloned = mode;
+        assert_eq!(mode, cloned);
+    }
+
+    #[test]
+    fn test_mode_eq() {
+        assert_eq!(Mode::Human, Mode::Human);
+        assert_eq!(Mode::Agent, Mode::Agent);
+        assert_eq!(Mode::Ci, Mode::Ci);
+        assert_ne!(Mode::Human, Mode::Agent);
+        assert_ne!(Mode::Agent, Mode::Ci);
+        assert_ne!(Mode::Human, Mode::Ci);
+    }
+
+    #[test]
+    fn test_mode_debug() {
+        let debug_str = format!("{:?}", Mode::Human);
+        assert_eq!(debug_str, "Human");
+    }
+
+    // =========================================================================
+    // DetectionReason tests
+    // =========================================================================
+
+    #[test]
+    fn test_detection_reason_display_explicit_apc_mode() {
+        let reason = DetectionReason::ExplicitApcMode("agent".to_string());
+        assert_eq!(reason.to_string(), "APC_MODE=agent");
+    }
+
+    #[test]
+    fn test_detection_reason_display_explicit_agent_mode() {
         let reason = DetectionReason::ExplicitAgentMode;
         assert_eq!(reason.to_string(), "AGENT_MODE=1");
+    }
+
+    #[test]
+    fn test_detection_reason_display_known_agent_env_var() {
+        let reason = DetectionReason::KnownAgentEnvVar("CLAUDE_CODE".to_string());
+        assert_eq!(reason.to_string(), "Known agent env var: CLAUDE_CODE");
+    }
+
+    #[test]
+    fn test_detection_reason_display_custom_agent_env_var() {
+        let reason = DetectionReason::CustomAgentEnvVar("MY_AGENT_VAR".to_string());
+        assert_eq!(reason.to_string(), "Custom agent env var: MY_AGENT_VAR");
+    }
+
+    #[test]
+    fn test_detection_reason_display_ci_environment() {
+        let reason = DetectionReason::CiEnvironment("GITHUB_ACTIONS".to_string());
+        assert_eq!(reason.to_string(), "CI environment: GITHUB_ACTIONS");
+    }
+
+    #[test]
+    fn test_detection_reason_display_no_tty() {
+        let reason = DetectionReason::NoTty;
+        assert_eq!(reason.to_string(), "No TTY detected (non-interactive)");
+    }
+
+    #[test]
+    fn test_detection_reason_display_default() {
+        let reason = DetectionReason::Default;
+        assert_eq!(reason.to_string(), "Default (no agent indicators)");
+    }
+
+    #[test]
+    fn test_detection_reason_equality() {
+        assert_eq!(
+            DetectionReason::ExplicitAgentMode,
+            DetectionReason::ExplicitAgentMode
+        );
+        assert_eq!(DetectionReason::NoTty, DetectionReason::NoTty);
+        assert_eq!(DetectionReason::Default, DetectionReason::Default);
+        assert_eq!(
+            DetectionReason::ExplicitApcMode("agent".to_string()),
+            DetectionReason::ExplicitApcMode("agent".to_string())
+        );
+        assert_ne!(
+            DetectionReason::ExplicitApcMode("agent".to_string()),
+            DetectionReason::ExplicitApcMode("human".to_string())
+        );
+    }
+
+    #[test]
+    fn test_detection_reason_clone() {
+        let reason = DetectionReason::KnownAgentEnvVar("CLAUDE_CODE".to_string());
+        let cloned = reason.clone();
+        assert_eq!(reason, cloned);
+    }
+
+    // =========================================================================
+    // Detection tests
+    // =========================================================================
+
+    #[test]
+    fn test_detection_struct() {
+        let detection = Detection {
+            mode: Mode::Agent,
+            reason: DetectionReason::ExplicitAgentMode,
+        };
+        assert_eq!(detection.mode, Mode::Agent);
+        assert_eq!(detection.reason, DetectionReason::ExplicitAgentMode);
+    }
+
+    #[test]
+    fn test_detection_clone() {
+        let detection = Detection {
+            mode: Mode::Ci,
+            reason: DetectionReason::CiEnvironment("CI".to_string()),
+        };
+        let cloned = detection.clone();
+        assert_eq!(detection.mode, cloned.mode);
+        assert_eq!(detection.reason, cloned.reason);
+    }
+
+    // =========================================================================
+    // Detector tests
+    // =========================================================================
+
+    #[test]
+    fn test_detector_new() {
+        let config = Config::default();
+        let detector = Detector::new(&config);
+        // Just verify we can create a detector
+        let debug_str = format!("{:?}", detector);
+        assert!(debug_str.contains("Detector"));
+    }
+
+    // =========================================================================
+    // Known env var list tests
+    // =========================================================================
+
+    #[test]
+    fn test_known_agent_env_vars_not_empty() {
+        assert!(!KNOWN_AGENT_ENV_VARS.is_empty());
+    }
+
+    #[test]
+    fn test_known_agent_env_vars_contains_claude_code() {
+        assert!(KNOWN_AGENT_ENV_VARS.contains(&"CLAUDE_CODE"));
+    }
+
+    #[test]
+    fn test_known_agent_env_vars_contains_cursor() {
+        assert!(KNOWN_AGENT_ENV_VARS.contains(&"CURSOR_SESSION"));
+    }
+
+    #[test]
+    fn test_known_agent_env_vars_contains_aider() {
+        assert!(KNOWN_AGENT_ENV_VARS.contains(&"AIDER_MODEL"));
+    }
+
+    #[test]
+    fn test_known_ci_env_vars_not_empty() {
+        assert!(!KNOWN_CI_ENV_VARS.is_empty());
+    }
+
+    #[test]
+    fn test_known_ci_env_vars_contains_ci() {
+        assert!(KNOWN_CI_ENV_VARS.contains(&"CI"));
+    }
+
+    #[test]
+    fn test_known_ci_env_vars_contains_github_actions() {
+        assert!(KNOWN_CI_ENV_VARS.contains(&"GITHUB_ACTIONS"));
+    }
+
+    #[test]
+    fn test_known_ci_env_vars_contains_gitlab_ci() {
+        assert!(KNOWN_CI_ENV_VARS.contains(&"GITLAB_CI"));
     }
 }
