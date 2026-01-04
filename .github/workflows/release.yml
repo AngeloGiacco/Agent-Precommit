@@ -1,0 +1,368 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g., v0.1.0)"
+        required: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ==========================================================================
+  # Create release
+  # ==========================================================================
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version
+        id: get_version
+        run: |
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            VERSION="${{ github.event.inputs.tag }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Version: ${VERSION}"
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          name: Release ${{ steps.get_version.outputs.version }}
+          draft: true
+          prerelease: ${{ contains(steps.get_version.outputs.version, '-') }}
+          generate_release_notes: true
+
+  # ==========================================================================
+  # Build binaries
+  # ==========================================================================
+  build-binaries:
+    name: Build (${{ matrix.target }})
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux x86_64 (glibc)
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            archive: tar.gz
+          # Linux x86_64 (musl - static)
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            archive: tar.gz
+          # Linux ARM64
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            archive: tar.gz
+          # macOS x86_64
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            archive: tar.gz
+          # macOS ARM64 (Apple Silicon)
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            archive: tar.gz
+          # Windows x86_64
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            archive: zip
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-compilation tools (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Install musl tools
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.target }}
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }}
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+
+      - name: Prepare archive (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          ARCHIVE_NAME="apc-${{ needs.create-release.outputs.version }}-${{ matrix.target }}"
+          mkdir -p "${ARCHIVE_NAME}"
+          cp "target/${{ matrix.target }}/release/apc" "${ARCHIVE_NAME}/"
+          cp Readme.md LICENSE* "${ARCHIVE_NAME}/" 2>/dev/null || true
+          tar -czvf "${ARCHIVE_NAME}.tar.gz" "${ARCHIVE_NAME}"
+          echo "ARCHIVE_NAME=${ARCHIVE_NAME}.tar.gz" >> $GITHUB_ENV
+
+      - name: Prepare archive (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $ARCHIVE_NAME = "apc-${{ needs.create-release.outputs.version }}-${{ matrix.target }}"
+          New-Item -ItemType Directory -Force -Path $ARCHIVE_NAME
+          Copy-Item "target/${{ matrix.target }}/release/apc.exe" -Destination "$ARCHIVE_NAME/"
+          Copy-Item "Readme.md" -Destination "$ARCHIVE_NAME/" -ErrorAction SilentlyContinue
+          Compress-Archive -Path $ARCHIVE_NAME -DestinationPath "$ARCHIVE_NAME.zip"
+          echo "ARCHIVE_NAME=$ARCHIVE_NAME.zip" >> $env:GITHUB_ENV
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.create-release.outputs.version }}
+          files: ${{ env.ARCHIVE_NAME }}
+
+  # ==========================================================================
+  # Build Python wheels
+  # ==========================================================================
+  build-wheels:
+    name: Build Wheels (${{ matrix.os }})
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install maturin
+        run: pip install maturin
+
+      - name: Build wheels
+        run: |
+          maturin build --release --strip
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: target/wheels/*.whl
+
+  # ==========================================================================
+  # Publish to PyPI
+  # ==========================================================================
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [create-release, build-wheels]
+    runs-on: ubuntu-latest
+    environment: pypi
+    steps:
+      - name: Download wheels
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          skip-existing: true
+
+  # ==========================================================================
+  # Publish to crates.io
+  # ==========================================================================
+  publish-crates:
+    name: Publish to crates.io
+    needs: create-release
+    runs-on: ubuntu-latest
+    environment: crates-io
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish to crates.io
+        run: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  # ==========================================================================
+  # Update Homebrew
+  # ==========================================================================
+  update-homebrew:
+    name: Update Homebrew Formula
+    needs: [create-release, build-binaries]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Calculate checksums
+        run: |
+          VERSION="${{ needs.create-release.outputs.version }}"
+          BASE_URL="https://github.com/${{ github.repository }}/releases/download/${VERSION}"
+
+          # Download release assets and calculate checksums
+          for TARGET in x86_64-apple-darwin aarch64-apple-darwin x86_64-unknown-linux-gnu; do
+            ARCHIVE="apc-${VERSION}-${TARGET}.tar.gz"
+            curl -sL "${BASE_URL}/${ARCHIVE}" -o "${ARCHIVE}"
+            SHA=$(shasum -a 256 "${ARCHIVE}" | cut -d' ' -f1)
+            echo "${TARGET}_SHA256=${SHA}" >> $GITHUB_ENV
+          done
+
+      - name: Generate Homebrew formula
+        run: |
+          VERSION="${{ needs.create-release.outputs.version }}"
+          VERSION_NUM="${VERSION#v}"
+
+          cat > agent-precommit.rb << EOF
+          class AgentPrecommit < Formula
+            desc "Smart pre-commit hooks for humans and AI coding agents"
+            homepage "https://github.com/${{ github.repository }}"
+            version "${VERSION_NUM}"
+            license "MIT"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/${{ github.repository }}/releases/download/${VERSION}/apc-${VERSION}-aarch64-apple-darwin.tar.gz"
+                sha256 "${{ env.aarch64-apple-darwin_SHA256 }}"
+              else
+                url "https://github.com/${{ github.repository }}/releases/download/${VERSION}/apc-${VERSION}-x86_64-apple-darwin.tar.gz"
+                sha256 "${{ env.x86_64-apple-darwin_SHA256 }}"
+              end
+            end
+
+            on_linux do
+              url "https://github.com/${{ github.repository }}/releases/download/${VERSION}/apc-${VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+              sha256 "${{ env.x86_64-unknown-linux-gnu_SHA256 }}"
+            end
+
+            def install
+              bin.install "apc"
+            end
+
+            test do
+              system "#{bin}/apc", "--version"
+            end
+          end
+          EOF
+
+          cat agent-precommit.rb
+
+      - name: Upload formula
+        uses: actions/upload-artifact@v4
+        with:
+          name: homebrew-formula
+          path: agent-precommit.rb
+
+  # ==========================================================================
+  # Generate install script
+  # ==========================================================================
+  generate-install-script:
+    name: Generate Install Script
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate install.sh
+        run: |
+          VERSION="${{ needs.create-release.outputs.version }}"
+          cat > install.sh << 'SCRIPT'
+          #!/bin/sh
+          set -e
+
+          # agent-precommit installer
+          # Usage: curl -fsSL https://agent-precommit.dev/install.sh | sh
+
+          VERSION="${1:-latest}"
+          REPO="agent-precommit/agent-precommit"
+          INSTALL_DIR="${HOME}/.local/bin"
+
+          # Detect OS and architecture
+          OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+          ARCH=$(uname -m)
+
+          case "${OS}" in
+            linux)
+              case "${ARCH}" in
+                x86_64) TARGET="x86_64-unknown-linux-gnu" ;;
+                aarch64) TARGET="aarch64-unknown-linux-gnu" ;;
+                *) echo "Unsupported architecture: ${ARCH}"; exit 1 ;;
+              esac
+              ;;
+            darwin)
+              case "${ARCH}" in
+                x86_64) TARGET="x86_64-apple-darwin" ;;
+                arm64) TARGET="aarch64-apple-darwin" ;;
+                *) echo "Unsupported architecture: ${ARCH}"; exit 1 ;;
+              esac
+              ;;
+            *)
+              echo "Unsupported OS: ${OS}"
+              exit 1
+              ;;
+          esac
+
+          # Get latest version if not specified
+          if [ "${VERSION}" = "latest" ]; then
+            VERSION=$(curl -sL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+          fi
+
+          echo "Installing agent-precommit ${VERSION} for ${TARGET}..."
+
+          # Download and extract
+          ARCHIVE="apc-${VERSION}-${TARGET}.tar.gz"
+          URL="https://github.com/${REPO}/releases/download/${VERSION}/${ARCHIVE}"
+
+          mkdir -p "${INSTALL_DIR}"
+          curl -fsSL "${URL}" | tar -xz -C "${INSTALL_DIR}" --strip-components=1 apc-${VERSION}-${TARGET}/apc
+
+          chmod +x "${INSTALL_DIR}/apc"
+
+          echo ""
+          echo "✓ Installed apc to ${INSTALL_DIR}/apc"
+          echo ""
+          echo "Make sure ${INSTALL_DIR} is in your PATH:"
+          echo '  export PATH="${HOME}/.local/bin:${PATH}"'
+          echo ""
+          echo "Get started:"
+          echo "  apc init"
+          echo "  apc install"
+          SCRIPT
+
+          chmod +x install.sh
+
+      - name: Upload install script
+        uses: actions/upload-artifact@v4
+        with:
+          name: install-script
+          path: install.sh

@@ -1,0 +1,79 @@
+# =============================================================================
+# Clippy Configuration - Strict Linting Thresholds
+# =============================================================================
+# This file provides additional configuration for Clippy lints
+# Main lint levels are configured in Cargo.toml under [lints.clippy]
+
+# Cognitive complexity threshold - functions more complex than this trigger a warning
+cognitive-complexity-threshold = 25
+
+# Maximum number of lines in a function before triggering too_many_lines
+too-many-lines-threshold = 100
+
+# Maximum number of function arguments before triggering too_many_arguments
+too-many-arguments-threshold = 7
+
+# Maximum number of bool parameters before triggering fn_params_excessive_bools
+max-fn-params-bools = 3
+
+# Maximum number of bool fields in a struct
+max-struct-bools = 3
+
+# MSRV - Minimum Supported Rust Version
+# This ensures suggested fixes are compatible with our rust-version in Cargo.toml
+msrv = "1.75"
+
+# Standard macros that should not trigger certain lints
+standard-macro-braces = []
+
+# Allowed duplicate modules for module_name_repetitions
+allowed-duplicate-crates = []
+
+# Type complexity threshold
+type-complexity-threshold = 250
+
+# Single char binding names allowed in specific contexts
+single-char-binding-names-threshold = 4
+
+# Trivial copy size limit (bytes)
+trivial-copy-size-limit = 16
+
+# Pass by value size limit (bytes)
+pass-by-value-size-limit = 256
+
+# Allowed wildcard imports (for tests)
+# allowed-wildcard-imports = ["crate::tests::*"]
+
+# Disallowed names (avoid generic names)
+disallowed-names = ["foo", "bar", "baz", "quux", "temp", "tmp"]
+
+# Enforce explicit return in closures
+accept-comment-above-statement = true
+accept-comment-above-attributes = true
+
+# Avoid assert in production code paths
+avoid-breaking-exported-api = true
+
+# Large error variant threshold for result_large_err
+large-error-threshold = 128
+
+# Future size threshold for large_futures lint
+future-size-threshold = 16384
+
+# Verbose bit mask threshold
+verbose-bit-mask-threshold = 1
+
+# Literal representation
+literal-representation-threshold = 16777215
+
+# Array size threshold for explicit iteration
+array-size-threshold = 512
+
+# Stack size threshold
+stack-size-threshold = 512000
+
+# Vec box size threshold
+vec-box-size-threshold = 4096
+
+# Allowed scripts for Unicode identifiers
+# We only allow ASCII identifiers (configured in Cargo.toml)
