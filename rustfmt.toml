@@ -1,0 +1,69 @@
+# =============================================================================
+# Rustfmt Configuration - Consistent, Readable Code Style
+# =============================================================================
+# Using stable options only for maximum compatibility
+# Run with: cargo fmt
+# Check with: cargo fmt --check
+
+# Edition
+edition = "2021"
+
+# Maximum line width
+max_width = 100
+
+# Use 4 spaces for indentation
+tab_spaces = 4
+hard_tabs = false
+
+# Imports
+imports_granularity = "Module"
+group_imports = "StdExternalCrate"
+reorder_imports = true
+reorder_modules = true
+
+# Comments
+wrap_comments = true
+format_code_in_doc_comments = true
+doc_comment_code_block_width = 80
+normalize_comments = true
+normalize_doc_attributes = true
+
+# Formatting choices
+use_small_heuristics = "Default"
+fn_single_line = false
+where_single_line = false
+force_multiline_blocks = false
+format_strings = false
+
+# Struct and enum formatting
+struct_lit_single_line = true
+enum_discrim_align_threshold = 20
+
+# Match arms
+match_arm_blocks = true
+match_arm_leading_pipes = "Never"
+match_block_trailing_comma = true
+
+# Control flow
+control_brace_style = "AlwaysSameLine"
+brace_style = "SameLineWhere"
+
+# Other
+newline_style = "Unix"
+remove_nested_parens = true
+combine_control_expr = true
+overflow_delimited_expr = false
+trailing_comma = "Vertical"
+trailing_semicolon = true
+use_field_init_shorthand = true
+use_try_shorthand = true
+force_explicit_abi = true
+condense_wildcard_suffixes = false
+format_generated_files = true
+generated_marker_line_search_limit = 5
+hex_literal_case = "Lower"
+space_after_colon = true
+space_before_colon = false
+spaces_around_ranges = false
+binop_separator = "Front"
+type_punctuation_density = "Wide"

@@ -1,0 +1,81 @@
+# agent-precommit configuration for the agent-precommit project itself
+# This serves as both a working example and dogfooding our own tool
+
+[detection]
+# Additional environment variables that indicate an agent
+agent_env_vars = []
+
+[integration]
+# We use pre-commit framework for base checks
+pre_commit = true
+pre_commit_path = ".pre-commit-config.yaml"
+
+[human]
+# Human mode: fast checks for quick iteration
+checks = ["pre-commit"]
+timeout = "30s"
+fail_fast = true
+
+[agent]
+# Agent mode: thorough checks for merge-ready commits
+checks = [
+    "pre-commit-all",
+    "no-merge-conflicts",
+    "fmt-check",
+    "clippy",
+    "test-unit",
+    "build-verify",
+]
+timeout = "15m"
+fail_fast = false
+
+# Run in parallel where possible
+parallel_groups = [
+    ["pre-commit-all", "no-merge-conflicts"],
+    ["fmt-check", "clippy"],
+    ["test-unit"],
+    ["build-verify"],
+]
+
+# =============================================================================
+# Check Definitions
+# =============================================================================
+
+[checks.pre-commit]
+run = "pre-commit run"
+description = "Run pre-commit on staged files"
+
+[checks.pre-commit-all]
+run = "pre-commit run --all-files"
+description = "Run pre-commit on all files"
+
+[checks.no-merge-conflicts]
+run = """
+git fetch origin main --quiet 2>/dev/null || git fetch origin master --quiet 2>/dev/null || true
+MAIN_BRANCH=$(git rev-parse --verify origin/main 2>/dev/null && echo "main" || echo "master")
+BASE=$(git merge-base HEAD origin/$MAIN_BRANCH 2>/dev/null || echo "")
+if [ -n "$BASE" ]; then
+    if git merge-tree $BASE HEAD origin/$MAIN_BRANCH 2>/dev/null | grep -q "^<<<<<<<"; then
+        echo "❌ Would conflict with $MAIN_BRANCH"
+        exit 1
+    fi
+fi
+echo "✓ No conflicts with main branch"
+"""
+description = "Check for merge conflicts with main/master"
+
+[checks.fmt-check]
+run = "cargo fmt --all -- --check"
+description = "Check Rust code formatting"
+
+[checks.clippy]
+run = "cargo clippy --all-targets --all-features -- -D warnings"
+description = "Run Clippy lints with strict warnings"
+
+[checks.test-unit]
+run = "cargo test --all-features"
+description = "Run all unit tests"
+
+[checks.build-verify]
+run = "cargo build --release"
+description = "Verify release build succeeds"

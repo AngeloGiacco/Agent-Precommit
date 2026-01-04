@@ -1,0 +1,80 @@
+[build-system]
+requires = ["maturin>=1.4,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "agent-precommit"
+version = "0.1.0"
+description = "Smart pre-commit hooks for humans and AI coding agents"
+readme = "Readme.md"
+license = { text = "MIT" }
+authors = [
+    { name = "agent-precommit contributors" }
+]
+keywords = ["git", "precommit", "hooks", "ai", "agents", "cli"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Rust",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Version Control :: Git",
+]
+requires-python = ">=3.8"
+
+[project.urls]
+Homepage = "https://github.com/agent-precommit/agent-precommit"
+Documentation = "https://docs.rs/agent-precommit"
+Repository = "https://github.com/agent-precommit/agent-precommit"
+Changelog = "https://github.com/agent-precommit/agent-precommit/blob/main/CHANGELOG.md"
+
+[project.scripts]
+apc = "agent_precommit:main"
+agent-precommit = "agent_precommit:main"
+
+[tool.maturin]
+# Build only the binary, not a Python extension
+bindings = "bin"
+# Strip the binary for smaller size
+strip = true
+# Features to enable
+features = []
+# Module name
+module-name = "agent_precommit"
+
+# Compatibility settings
+compatibility = "manylinux2014"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.ruff]
+target-version = "py38"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long, handled by formatter
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
