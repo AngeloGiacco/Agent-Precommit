@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent-Precommit | Intelligent Pre-commit Hooks for AI Agents</title>
+    <meta name="description" content="Smart pre-commit hooks that auto-detect human vs AI commits and run the appropriate checks. Ensure agent commits pass CI on the first try.">
+    <style>
+        :root {
+            --bg: #0a0a0a;
+            --surface: #111111;
+            --border: #222222;
+            --text: #e5e5e5;
+            --text-muted: #737373;
+            --accent: #22c55e;
+            --accent-dim: #166534;
+            --code-bg: #1a1a1a;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        /* Header */
+        header {
+            padding: 48px 0 64px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .logo {
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-bottom: 32px;
+        }
+
+        h1 {
+            font-size: clamp(32px, 6vw, 48px);
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            margin-bottom: 16px;
+        }
+
+        .tagline {
+            font-size: 18px;
+            color: var(--text-muted);
+            max-width: 540px;
+        }
+
+        /* Problem/Solution */
+        .problem-solution {
+            padding: 64px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .section-label {
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--accent);
+            margin-bottom: 16px;
+        }
+
+        .problem-solution h2 {
+            font-size: 24px;
+            font-weight: 500;
+            margin-bottom: 12px;
+        }
+
+        .problem-solution p {
+            color: var(--text-muted);
+            margin-bottom: 32px;
+        }
+
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-top: 32px;
+        }
+
+        @media (max-width: 600px) {
+            .comparison {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .comparison-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 24px;
+        }
+
+        .comparison-card h3 {
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .comparison-card .time {
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 28px;
+            font-weight: 600;
+            color: var(--accent);
+            margin-bottom: 8px;
+        }
+
+        .comparison-card .desc {
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
+        /* How It Works */
+        .how-it-works {
+            padding: 64px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .flow {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 32px;
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 14px;
+            overflow-x: auto;
+        }
+
+        .flow-line {
+            margin: 8px 0;
+            color: var(--text-muted);
+        }
+
+        .flow-line .cmd {
+            color: var(--text);
+        }
+
+        .flow-line .arrow {
+            color: var(--accent);
+        }
+
+        .flow-line .comment {
+            color: var(--text-muted);
+            opacity: 0.6;
+        }
+
+        /* Features */
+        .features {
+            padding: 64px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 24px;
+            margin-top: 32px;
+        }
+
+        .feature {
+            padding: 24px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+
+        .feature h3 {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+
+        .feature p {
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
+        /* Install */
+        .install {
+            padding: 64px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .code-block {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px 24px;
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 14px;
+            overflow-x: auto;
+            margin: 16px 0;
+        }
+
+        .code-block .comment {
+            color: var(--text-muted);
+        }
+
+        .code-block .prompt {
+            color: var(--accent);
+            user-select: none;
+        }
+
+        /* Supported */
+        .supported {
+            padding: 64px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .stack-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        .stack-tag {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 16px;
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 13px;
+        }
+
+        /* CTA */
+        .cta {
+            padding: 80px 0;
+            text-align: center;
+        }
+
+        .cta h2 {
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
+        .cta p {
+            color: var(--text-muted);
+            margin-bottom: 32px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--accent);
+            color: #000;
+            padding: 14px 28px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 15px;
+            transition: opacity 0.2s;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
+
+        .btn svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        /* Footer */
+        footer {
+            padding: 32px 0;
+            border-top: 1px solid var(--border);
+            text-align: center;
+        }
+
+        footer p {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        footer a {
+            color: var(--text-muted);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        footer a:hover {
+            color: var(--accent);
+        }
+
+        /* Agents list */
+        .agents {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .agent-tag {
+            font-size: 12px;
+            color: var(--text-muted);
+            background: var(--code-bg);
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">$ apc</div>
+            <h1>agent-precommit</h1>
+            <p class="tagline">Intelligent pre-commit hooks that auto-detect human vs AI commits and run the appropriate level of checks.</p>
+        </header>
+
+        <section class="problem-solution">
+            <div class="section-label">The Problem</div>
+            <h2>AI agents break CI. A lot.</h2>
+            <p>Standard pre-commit hooks optimize for humans: fast checks, quick feedback. But AI coding agents work differently. They commit once when done, and their commits often fail CI because the checks weren't thorough enough. This triggers expensive review cycles, bloats context windows, and wastes tokens.</p>
+
+            <div class="section-label" style="margin-top: 40px;">The Solution</div>
+            <h2>Right checks for the right context.</h2>
+            <p>agent-precommit auto-detects whether a commit is from a human or an agent and routes to the appropriate check suite.</p>
+
+            <div class="comparison">
+                <div class="comparison-card">
+                    <h3><span>Human Mode</span></h3>
+                    <div class="time">~3s</div>
+                    <div class="desc">Fast feedback. Staged files only. Get back to work.</div>
+                </div>
+                <div class="comparison-card">
+                    <h3><span>Agent Mode</span></h3>
+                    <div class="time">~5m</div>
+                    <div class="desc">Thorough checks. All files. Merge-ready commits.</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="how-it-works">
+            <div class="section-label">How It Works</div>
+            <div class="flow">
+                <div class="flow-line"><span class="cmd">git commit</span></div>
+                <div class="flow-line"><span class="arrow">    |</span></div>
+                <div class="flow-line"><span class="arrow">    v</span></div>
+                <div class="flow-line"><span class="cmd">.git/hooks/pre-commit</span> <span class="comment"># installed by apc</span></div>
+                <div class="flow-line"><span class="arrow">    |</span></div>
+                <div class="flow-line"><span class="arrow">    v</span></div>
+                <div class="flow-line"><span class="cmd">Detector</span> <span class="comment"># env vars, TTY, parent process</span></div>
+                <div class="flow-line"><span class="arrow">    |</span></div>
+                <div class="flow-line"><span class="arrow">    +---> human? ---> fast checks</span></div>
+                <div class="flow-line"><span class="arrow">    |</span></div>
+                <div class="flow-line"><span class="arrow">    +---> agent? ---> thorough checks (parallel)</span></div>
+            </div>
+
+            <div class="agents">
+                <span class="agent-tag">Claude Code</span>
+                <span class="agent-tag">Cursor</span>
+                <span class="agent-tag">Aider</span>
+                <span class="agent-tag">Cline</span>
+                <span class="agent-tag">Devin</span>
+                <span class="agent-tag">Codex</span>
+                <span class="agent-tag">+ more</span>
+            </div>
+        </section>
+
+        <section class="features">
+            <div class="section-label">Features</div>
+            <div class="feature-grid">
+                <div class="feature">
+                    <h3>Auto-Detection</h3>
+                    <p>Detects agent commits via environment variables, TTY checks, and process heuristics.</p>
+                </div>
+                <div class="feature">
+                    <h3>Pre-commit Integration</h3>
+                    <p>Wraps your existing .pre-commit-config.yaml. No migration required.</p>
+                </div>
+                <div class="feature">
+                    <h3>Parallel Execution</h3>
+                    <p>Run independent checks concurrently. Agent mode stays fast despite thoroughness.</p>
+                </div>
+                <div class="feature">
+                    <h3>Single Binary</h3>
+                    <p>Written in Rust. Zero runtime dependencies. Instant startup.</p>
+                </div>
+                <div class="feature">
+                    <h3>Built-in Checks</h3>
+                    <p>Tests, security scans, merge conflict detection, build verification.</p>
+                </div>
+                <div class="feature">
+                    <h3>Configurable</h3>
+                    <p>Define custom checks, timeouts, and parallel groups in TOML.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="install">
+            <div class="section-label">Quick Start</div>
+            <div class="code-block">
+<span class="comment"># Install</span>
+<span class="prompt">$</span> cargo install agent-precommit
+
+<span class="comment"># Initialize in your project</span>
+<span class="prompt">$</span> apc init --preset=rust  <span class="comment"># or python, node, go</span>
+
+<span class="comment"># Install git hook</span>
+<span class="prompt">$</span> apc install
+
+<span class="comment"># Tell your AI agent to use agent mode</span>
+<span class="comment"># Add to CLAUDE.md or .cursor/rules:</span>
+<span class="comment"># "Use AGENT_MODE=1 git commit for commits"</span>
+            </div>
+        </section>
+
+        <section class="supported">
+            <div class="section-label">Built-in Presets</div>
+            <p style="color: var(--text-muted);">Quick setup for popular stacks with sensible defaults.</p>
+            <div class="stack-grid">
+                <span class="stack-tag">python</span>
+                <span class="stack-tag">node</span>
+                <span class="stack-tag">rust</span>
+                <span class="stack-tag">go</span>
+            </div>
+        </section>
+
+        <section class="cta">
+            <h2>Stop failing CI.</h2>
+            <p>Make every agent commit merge-ready.</p>
+            <a href="https://github.com/AngeloGiacco/Agent-Precommit" class="btn" target="_blank" rel="noopener noreferrer">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                View on GitHub
+            </a>
+        </section>
+    </div>
+
+    <footer>
+        <div class="container">
+            <p>Built with Rust. <a href="https://github.com/AngeloGiacco/Agent-Precommit">Open source</a> under MIT.</p>
+        </div>
+    </footer>
+</body>
+</html>
