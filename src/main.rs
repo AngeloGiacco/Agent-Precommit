@@ -3,8 +3,9 @@
 use agent_precommit::cli;
 use std::process::ExitCode;
 
-fn main() -> ExitCode {
-    match cli::run() {
+#[tokio::main]
+async fn main() -> ExitCode {
+    match cli::run().await {
         Ok(code) => code,
         Err(e) => {
             eprintln!("Error: {e}");

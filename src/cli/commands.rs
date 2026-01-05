@@ -6,7 +6,7 @@ use crate::core::error::{Error, Result};
 use crate::core::git::GitRepo;
 use crate::core::runner::Runner;
 use console::style;
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -190,7 +190,7 @@ pub fn uninstall() -> Result<ExitCode> {
 }
 
 /// Run checks.
-pub fn run(mode_override: Option<&str>, check: Option<&str>, _all: bool) -> Result<ExitCode> {
+pub async fn run(mode_override: Option<&str>, check: Option<&str>, _all: bool) -> Result<ExitCode> {
     // Check for skip
     if std::env::var("APC_SKIP").ok().as_deref() == Some("1") {
         eprintln!("{} Skipping checks (APC_SKIP=1)", style("•").cyan());
@@ -222,22 +222,16 @@ pub fn run(mode_override: Option<&str>, check: Option<&str>, _all: bool) -> Resu
     let runner = Runner::new(config);
 
     // Run checks
-    let result = tokio::runtime::Runtime::new()
-        .map_err(|e| Error::Internal {
-            message: format!("Failed to create runtime: {e}"),
-        })?
-        .block_on(async {
-            if let Some(name) = check {
-                let check_result = runner.run_single(name, mode).await?;
-                Ok(crate::core::runner::RunResult {
-                    mode,
-                    checks: vec![check_result],
-                    duration: std::time::Duration::ZERO,
-                })
-            } else {
-                runner.run(mode).await
-            }
-        })?;
+    let result = if let Some(name) = check {
+        let check_result = runner.run_single(name, mode).await?;
+        crate::core::runner::RunResult {
+            mode,
+            checks: vec![check_result],
+            duration: std::time::Duration::ZERO,
+        }
+    } else {
+        runner.run(mode).await?
+    };
 
     // Print summary
     eprintln!();
@@ -409,5 +403,3 @@ pub fn completions(shell: clap_complete::Shell) {
         &mut std::io::stdout(),
     );
 }
-
-use std::io::IsTerminal;
