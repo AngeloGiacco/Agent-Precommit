@@ -341,7 +341,7 @@ mod tests {
 
     #[test]
     fn test_mode_parse_error_message() {
-        let err = "invalid".parse::<Mode>().unwrap_err();
+        let err = "invalid".parse::<Mode>().expect_err("should fail to parse invalid");
         assert!(err.contains("Invalid mode"));
         assert!(err.contains("human, agent, or ci"));
     }
@@ -495,8 +495,9 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn test_known_agent_env_vars_not_empty() {
-        assert!(!KNOWN_AGENT_ENV_VARS.is_empty());
+    fn test_known_agent_env_vars_has_expected_count() {
+        // Verify we have a reasonable number of known agent env vars
+        assert!(KNOWN_AGENT_ENV_VARS.len() >= 10);
     }
 
     #[test]
@@ -515,8 +516,9 @@ mod tests {
     }
 
     #[test]
-    fn test_known_ci_env_vars_not_empty() {
-        assert!(!KNOWN_CI_ENV_VARS.is_empty());
+    fn test_known_ci_env_vars_has_expected_count() {
+        // Verify we have a reasonable number of known CI env vars
+        assert!(KNOWN_CI_ENV_VARS.len() >= 10);
     }
 
     #[test]

@@ -314,7 +314,14 @@ async fn run_check_async(
         Mode::Agent | Mode::Ci => &config.agent.timeout,
     };
 
-    let timeout = parse_duration(timeout_str).unwrap_or(Duration::from_secs(300));
+    let timeout = parse_duration(timeout_str).unwrap_or_else(|| {
+        tracing::warn!(
+            timeout_str = %timeout_str,
+            default_secs = 300,
+            "Invalid timeout format, using default"
+        );
+        Duration::from_secs(300)
+    });
 
     let mut options = ExecuteOptions::default().timeout(timeout);
 
@@ -742,5 +749,37 @@ mod tests {
     fn test_available_parallelism() {
         let parallelism = concurrency::available_parallelism();
         assert!(parallelism >= 1);
+    }
+
+    // =========================================================================
+    // Security tests - timeout parsing
+    // =========================================================================
+
+    #[test]
+    fn test_parse_duration_valid_formats() {
+        // Verify that valid duration formats are parsed correctly
+        assert!(parse_duration("30s").is_some());
+        assert!(parse_duration("5m").is_some());
+        assert!(parse_duration("1h").is_some());
+        assert!(parse_duration("1h30m").is_some());
+        assert!(parse_duration("15m30s").is_some());
+    }
+
+    #[test]
+    fn test_parse_duration_invalid_returns_none() {
+        // Invalid formats should return None (triggering the warning log)
+        assert!(parse_duration("invalid").is_none());
+        assert!(parse_duration("").is_none());
+        assert!(parse_duration("abc").is_none());
+        assert!(parse_duration("-5s").is_none());
+        // Note: These now return None, which triggers the warning log in run_check_async
+    }
+
+    #[test]
+    fn test_parse_duration_boundary_values() {
+        // Test boundary values
+        assert!(parse_duration("0s").is_some());
+        assert!(parse_duration("1s").is_some());
+        assert!(parse_duration("999999s").is_some());
     }
 }

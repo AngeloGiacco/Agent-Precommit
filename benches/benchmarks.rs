@@ -1,5 +1,8 @@
 //! Benchmarks for agent-precommit.
 
+#![allow(missing_docs)]
+#![allow(let_underscore_drop)]
+
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 fn benchmark_mode_detection(c: &mut Criterion) {
@@ -25,7 +28,9 @@ timeout = "15m"
 
     c.bench_function("config_parsing", |b| {
         b.iter(|| {
-            let _: toml::Value = toml::from_str(black_box(toml_content)).unwrap();
+            let result: toml::Value =
+                toml::from_str(black_box(toml_content)).expect("parse config");
+            black_box(result)
         });
     });
 }

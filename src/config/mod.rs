@@ -69,14 +69,28 @@ impl Config {
     }
 
     /// Finds the configuration file by searching up the directory tree.
+    ///
+    /// # Security
+    ///
+    /// This function canonicalizes paths to prevent symlink attacks where
+    /// a malicious symlink could redirect config loading to an unexpected location.
     pub fn find_config_file() -> Result<PathBuf> {
         let cwd = std::env::current_dir().map_err(|e| Error::io("get current dir", e))?;
+
+        // Canonicalize the starting directory to resolve symlinks
+        let cwd = cwd
+            .canonicalize()
+            .map_err(|e| Error::io("canonicalize current dir", e))?;
 
         let mut current = cwd.as_path();
         loop {
             let config_path = current.join(CONFIG_FILE_NAME);
             if config_path.exists() {
-                return Ok(config_path);
+                // Canonicalize the config path to ensure it resolves to a real location
+                let canonical_path = config_path
+                    .canonicalize()
+                    .map_err(|e| Error::io("canonicalize config path", e))?;
+                return Ok(canonical_path);
             }
 
             match current.parent() {
@@ -644,7 +658,7 @@ mod tests {
         config.human.timeout = "invalid".to_string();
         let result = config.validate();
         assert!(result.is_err());
-        let err_msg = result.unwrap_err().to_string();
+        let err_msg = result.expect_err("should fail for invalid timeout").to_string();
         assert!(err_msg.contains("Invalid duration"));
     }
 
@@ -671,7 +685,7 @@ mod tests {
         config.checks.insert(
             "placeholder-check".to_string(),
             CheckConfig {
-                run: "".to_string(),
+                run: String::new(),
                 description: "Test".to_string(),
                 enabled_if: None,
                 env: HashMap::new(),
@@ -861,7 +875,7 @@ mod tests {
             env: HashMap::new(),
         };
         assert!(check.enabled_if.is_some());
-        let condition = check.enabled_if.as_ref().unwrap();
+        let condition = check.enabled_if.as_ref().expect("enabled_if should be Some");
         assert_eq!(condition.file_exists, Some("Cargo.toml".to_string()));
     }
 
@@ -1008,5 +1022,109 @@ description = "Test"
         let config = Config::default();
         let debug_str = format!("{:?}", config);
         assert!(debug_str.contains("Config"));
+    }
+
+    // =========================================================================
+    // Security tests - path canonicalization
+    // =========================================================================
+
+    #[test]
+    fn test_find_config_file_returns_canonical_path() {
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().expect("create temp dir");
+        let config_path = temp.path().join(CONFIG_FILE_NAME);
+
+        // Write a valid config
+        let config = Config::default();
+        let toml_str = toml::to_string_pretty(&config).expect("serialize");
+        std::fs::write(&config_path, toml_str).expect("write config");
+
+        // Change to temp directory and find config
+        let original_dir = std::env::current_dir().expect("get cwd");
+        std::env::set_current_dir(temp.path()).expect("change to temp dir");
+
+        let result = Config::find_config_file();
+        std::env::set_current_dir(original_dir).expect("restore cwd");
+
+        assert!(result.is_ok());
+        let found_path = result.expect("find config");
+
+        // The path should be absolute (canonicalized)
+        assert!(found_path.is_absolute());
+        // The path should exist
+        assert!(found_path.exists());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_find_config_file_resolves_symlinks() {
+        use std::os::unix::fs::symlink;
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().expect("create temp dir");
+        let real_dir = temp.path().join("real");
+        let link_dir = temp.path().join("link");
+
+        std::fs::create_dir(&real_dir).expect("create real dir");
+
+        // Create config in real directory
+        let config = Config::default();
+        let toml_str = toml::to_string_pretty(&config).expect("serialize");
+        std::fs::write(real_dir.join(CONFIG_FILE_NAME), toml_str).expect("write config");
+
+        // Create symlink to real directory
+        symlink(&real_dir, &link_dir).expect("create symlink");
+
+        // Change to symlinked directory and find config
+        let original_dir = std::env::current_dir().expect("get cwd");
+        std::env::set_current_dir(&link_dir).expect("change to link dir");
+
+        let result = Config::find_config_file();
+        std::env::set_current_dir(original_dir).expect("restore cwd");
+
+        assert!(result.is_ok());
+        let found_path = result.expect("find config");
+
+        // The path should be resolved to the real location (not through symlink)
+        // After canonicalization, the path should not contain "link"
+        let path_str = found_path.to_string_lossy();
+        assert!(
+            !path_str.contains("link"),
+            "Path should be canonicalized: {path_str}"
+        );
+        assert!(
+            path_str.contains("real"),
+            "Path should resolve to real dir: {path_str}"
+        );
+    }
+
+    #[test]
+    fn test_find_config_file_walks_up_canonicalized_tree() {
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().expect("create temp dir");
+        let nested = temp.path().join("src/lib/utils");
+        std::fs::create_dir_all(&nested).expect("create nested dirs");
+
+        // Create config at root
+        let config = Config::default();
+        let toml_str = toml::to_string_pretty(&config).expect("serialize");
+        std::fs::write(temp.path().join(CONFIG_FILE_NAME), toml_str).expect("write config");
+
+        // Change to nested directory and find config
+        let original_dir = std::env::current_dir().expect("get cwd");
+        std::env::set_current_dir(&nested).expect("change to nested dir");
+
+        let result = Config::find_config_file();
+        std::env::set_current_dir(original_dir).expect("restore cwd");
+
+        assert!(result.is_ok());
+        let found_path = result.expect("find config");
+
+        // Should find the config in the parent directory
+        assert!(found_path.is_absolute());
+        assert!(found_path.exists());
+        assert!(found_path.ends_with(CONFIG_FILE_NAME));
     }
 }
