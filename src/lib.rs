@@ -16,10 +16,10 @@
 //! ## Example
 //!
 //! ```rust,no_run
-//! use agent_precommit::{Config, Detector, Mode, Runner};
+//! use agent_precommit::{Config, Detector, Result, Runner};
 //!
 //! #[tokio::main]
-//! async fn main() -> anyhow::Result<()> {
+//! async fn main() -> Result<()> {
 //!     // Load configuration
 //!     let config = Config::load_or_default()?;
 //!

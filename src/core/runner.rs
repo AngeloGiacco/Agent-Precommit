@@ -91,6 +91,7 @@ impl RunResult {
     }
 
     /// Returns failed check results.
+    #[must_use]
     pub fn failed_checks(&self) -> impl Iterator<Item = &CheckResult> {
         self.checks.iter().filter(|c| !c.passed)
     }
@@ -233,7 +234,7 @@ impl Runner {
         };
 
         let mut all_results = Vec::new();
-        let semaphore = Arc::new(Semaphore::new(num_cpus::get()));
+        let semaphore = Arc::new(Semaphore::new(concurrency::available_parallelism()));
 
         for group in groups {
             let group_checks: Vec<_> = group
@@ -253,7 +254,10 @@ impl Runner {
                 let repo = self.repo.clone();
 
                 handles.push(tokio::spawn(async move {
-                    let _permit = sem.acquire().await;
+                    // Acquire semaphore permit; if semaphore is closed, treat as internal error
+                    let _permit = sem.acquire().await.map_err(|_| Error::Internal {
+                        message: "Semaphore closed unexpectedly".to_string(),
+                    })?;
                     run_check_async(&name, &check, mode, &config, repo.as_ref()).await
                 }));
             }
@@ -314,7 +318,7 @@ async fn run_check_async(
 
     let mut options = ExecuteOptions::default().timeout(timeout);
 
-    if let Some(ref repo) = repo {
+    if let Some(repo) = repo {
         options = options.cwd(repo.root());
     }
 
@@ -398,9 +402,10 @@ fn parse_duration(s: &str) -> Option<Duration> {
     humantime::parse_duration(s).ok()
 }
 
-/// Gets the number of CPUs for parallel execution.
-mod num_cpus {
-    pub fn get() -> usize {
+/// Concurrency utilities for parallel execution.
+mod concurrency {
+    /// Returns the number of available CPU cores for parallel execution.
+    pub fn available_parallelism() -> usize {
         std::thread::available_parallelism()
             .map(|p| p.get())
             .unwrap_or(4)
@@ -730,12 +735,12 @@ mod tests {
     }
 
     // =========================================================================
-    // num_cpus tests
+    // concurrency tests
     // =========================================================================
 
     #[test]
-    fn test_num_cpus_get() {
-        let cpus = num_cpus::get();
-        assert!(cpus >= 1);
+    fn test_available_parallelism() {
+        let parallelism = concurrency::available_parallelism();
+        assert!(parallelism >= 1);
     }
 }

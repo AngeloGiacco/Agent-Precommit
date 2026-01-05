@@ -111,10 +111,15 @@ impl Config {
     }
 
     /// Generates default configuration as a string.
-    #[must_use]
-    pub fn default_toml() -> String {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if serialization fails (should not happen with default config).
+    pub fn default_toml() -> Result<String> {
         let config = Self::default();
-        toml::to_string_pretty(&config).unwrap_or_default()
+        toml::to_string_pretty(&config).map_err(|e| Error::Internal {
+            message: format!("Failed to serialize default config: {e}"),
+        })
     }
 
     /// Generates configuration for a specific preset.
@@ -259,7 +264,7 @@ impl Default for AgentModeConfig {
 }
 
 /// Configuration for a single check.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CheckConfig {
     /// Command to run.
@@ -274,24 +279,13 @@ pub struct CheckConfig {
     pub env: HashMap<String, String>,
 }
 
-impl Default for CheckConfig {
-    fn default() -> Self {
-        Self {
-            run: String::new(),
-            description: String::new(),
-            enabled_if: None,
-            env: HashMap::new(),
-        }
-    }
-}
-
 impl CheckConfig {
     /// Creates a check config from a simple command.
     #[must_use]
     pub fn from_command(cmd: String) -> Self {
         Self {
-            run: cmd.clone(),
-            description: cmd,
+            description: cmd.clone(),
+            run: cmd,
             enabled_if: None,
             env: HashMap::new(),
         }
@@ -756,7 +750,7 @@ mod tests {
 
     #[test]
     fn test_default_toml_generation() {
-        let toml = Config::default_toml();
+        let toml = Config::default_toml().expect("should serialize");
         assert!(!toml.is_empty());
         assert!(toml.contains("[human]"));
         assert!(toml.contains("[agent]"));

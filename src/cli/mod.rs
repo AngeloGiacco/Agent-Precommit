@@ -145,7 +145,7 @@ pub enum Commands {
 }
 
 /// Runs the CLI.
-pub fn run() -> Result<ExitCode> {
+pub async fn run() -> Result<ExitCode> {
     let cli = Cli::parse();
 
     // Set up logging
@@ -160,7 +160,7 @@ pub fn run() -> Result<ExitCode> {
         Some(Commands::Install { force }) => commands::install(force),
         Some(Commands::Uninstall) => commands::uninstall(),
         Some(Commands::Run { mode, check, all }) => {
-            commands::run(mode.as_deref(), check.as_deref(), all)
+            commands::run(mode.as_deref(), check.as_deref(), all).await
         },
         Some(Commands::Detect) => commands::detect(),
         Some(Commands::List { mode }) => commands::list(mode.as_deref()),
@@ -170,7 +170,7 @@ pub fn run() -> Result<ExitCode> {
             commands::completions(shell);
             Ok(ExitCode::SUCCESS)
         },
-        None => commands::run(None, None, false),
+        None => commands::run(None, None, false).await,
     }
 }
 
