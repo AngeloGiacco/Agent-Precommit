@@ -1,0 +1,46 @@
+{
+  "name": "agent-precommit",
+  "version": "0.1.0",
+  "description": "Smart pre-commit hooks for humans and AI coding agents",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agent-precommit/agent-precommit.git"
+  },
+  "homepage": "https://github.com/agent-precommit/agent-precommit",
+  "bugs": {
+    "url": "https://github.com/agent-precommit/agent-precommit/issues"
+  },
+  "keywords": [
+    "git",
+    "precommit",
+    "pre-commit",
+    "hooks",
+    "ai",
+    "agents",
+    "cli"
+  ],
+  "bin": {
+    "apc": "npm/run.js",
+    "agent-precommit": "npm/run.js"
+  },
+  "files": [
+    "npm",
+    "bin"
+  ],
+  "scripts": {
+    "postinstall": "node npm/postinstall.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ]
+}
