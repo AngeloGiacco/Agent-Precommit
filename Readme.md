@@ -42,17 +42,22 @@ git config alias.acommit '!AGENT_MODE=1 git commit'
 ### Auto-detection
 
 If `AGENT_MODE` isn't set, the tool checks (in order):
-1. `APC_MODE` environment variable
-2. Known agent env vars (`CLAUDE_CODE`, `CURSOR_SESSION`, `AIDER_MODEL`, etc.)
-3. CI environment (`GITHUB_ACTIONS`, `CI`, etc.)
-4. No TTY (non-interactive terminal)
-5. Default: human
+1. `APC_MODE` environment variable (explicit override)
+2. `AGENT_MODE=1` environment variable
+3. Known agent env vars (`CLAUDE_CODE`, `CURSOR_SESSION`, `AIDER_MODEL`, etc.)
+4. Custom agent env vars from config (`detection.agent_env_vars`)
+5. CI environment (`GITHUB_ACTIONS`, `GITLAB_CI`, `CI`, etc.)
+6. No TTY (non-interactive terminal)
+7. Default: human
 
 ## Configuration
 
 `agent-precommit.toml`:
 
 ```toml
+[detection]
+agent_env_vars = ["MY_AGENT"]  # Custom env vars that trigger agent mode
+
 [integration]
 pre_commit = true  # Wrap existing .pre-commit-config.yaml
 
@@ -85,6 +90,47 @@ apc init --preset=rust     # cargo fmt, clippy, test
 apc init --preset=go       # gofmt, golangci-lint, go test
 ```
 
+## Using with pre-commit Framework
+
+`agent-precommit` is designed to work alongside the [pre-commit](https://pre-commit.com/) framework, not replace it. Here's how they interact:
+
+### How It Works
+
+1. **`apc install` replaces the git hook** - When you run `apc install`, it installs its own `.git/hooks/pre-commit` script that calls `apc run`. If a pre-commit framework hook already exists, it backs it up to `pre-commit.bak`.
+
+2. **`apc` wraps pre-commit as a check** - The built-in `pre-commit` and `pre-commit-all` checks call the `pre-commit` CLI tool:
+   - `pre-commit` → Runs `pre-commit run` (staged files only, for humans)
+   - `pre-commit-all` → Runs `pre-commit run --all-files` (for agents)
+
+3. **Your `.pre-commit-config.yaml` stays unchanged** - All your existing pre-commit hooks continue to work exactly as before.
+
+### Setup with Existing pre-commit
+
+```bash
+# If you already have .pre-commit-config.yaml
+apc init        # Auto-detects and enables integration
+apc install     # Replaces pre-commit's hook with apc's hook
+
+# Your flow stays the same
+git add .
+git commit      # apc runs, which runs pre-commit + other checks
+```
+
+### What Runs When
+
+| Mode | What Happens |
+|------|--------------|
+| Human | `apc` → `pre-commit run` (staged files only) |
+| Agent | `apc` → `pre-commit run --all-files` + tests + build + merge check |
+
+### Reverting to pre-commit Only
+
+```bash
+apc uninstall                           # Removes apc hook
+mv .git/hooks/pre-commit.bak .git/hooks/pre-commit  # Restore backup
+# Or: pre-commit install                # Reinstall pre-commit's hook
+```
+
 ## CLI
 
 ```bash
@@ -97,6 +143,8 @@ apc run --check=test-unit # Run single check
 apc detect                # Show detected mode
 apc list                  # List checks
 apc validate              # Validate config
+apc config                # Show config file location
+apc completions bash      # Generate shell completions (bash/zsh/fish)
 ```
 
 ## Environment Variables
