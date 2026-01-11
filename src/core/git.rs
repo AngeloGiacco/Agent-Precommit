@@ -257,7 +257,10 @@ mod tests {
 
         // Discover from subdirectory should find parent repo
         let repo = GitRepo::discover_from(&subdir).expect("discover from subdir");
-        assert_eq!(repo.root(), temp.path());
+        // Canonicalize both paths to handle macOS /var -> /private/var symlinks
+        let expected = temp.path().canonicalize().expect("canonicalize temp");
+        let actual = repo.root().canonicalize().expect("canonicalize root");
+        assert_eq!(actual, expected);
     }
 
     #[test]
@@ -488,14 +491,23 @@ mod tests {
     #[test]
     fn test_root_accessor() {
         let (temp, repo) = create_test_repo();
-        assert_eq!(repo.root(), temp.path());
+        // Canonicalize both paths to handle macOS /var -> /private/var symlinks
+        let expected = temp.path().canonicalize().expect("canonicalize temp");
+        let actual = repo.root().canonicalize().expect("canonicalize root");
+        assert_eq!(actual, expected);
     }
 
     #[test]
     fn test_git_dir_accessor() {
         let (temp, repo) = create_test_repo();
-        let expected = temp.path().join(".git");
-        assert_eq!(repo.git_dir(), expected);
+        // Canonicalize both paths to handle macOS /var -> /private/var symlinks
+        let expected = temp
+            .path()
+            .join(".git")
+            .canonicalize()
+            .expect("canonicalize temp");
+        let actual = repo.git_dir().canonicalize().expect("canonicalize git_dir");
+        assert_eq!(actual, expected);
     }
 
     // =========================================================================

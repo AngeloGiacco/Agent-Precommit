@@ -2,7 +2,7 @@
 name = "agent-precommit"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.82"
 authors = ["agent-precommit contributors"]
 description = "Smart pre-commit hooks for humans and AI coding agents"
 documentation = "https://docs.rs/agent-precommit"

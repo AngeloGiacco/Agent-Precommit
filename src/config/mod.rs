@@ -658,7 +658,9 @@ mod tests {
         config.human.timeout = "invalid".to_string();
         let result = config.validate();
         assert!(result.is_err());
-        let err_msg = result.expect_err("should fail for invalid timeout").to_string();
+        let err_msg = result
+            .expect_err("should fail for invalid timeout")
+            .to_string();
         assert!(err_msg.contains("Invalid duration"));
     }
 
@@ -875,7 +877,10 @@ mod tests {
             env: HashMap::new(),
         };
         assert!(check.enabled_if.is_some());
-        let condition = check.enabled_if.as_ref().expect("enabled_if should be Some");
+        let condition = check
+            .enabled_if
+            .as_ref()
+            .expect("enabled_if should be Some");
         assert_eq!(condition.file_exists, Some("Cargo.toml".to_string()));
     }
 
@@ -1056,7 +1061,13 @@ description = "Test"
         assert!(found_path.exists());
     }
 
+    // NOTE: These tests are ignored because they modify the global current working
+    // directory, which causes race conditions when tests run in parallel. The CWD
+    // change can interfere with other tests, and temp directory cleanup can cause
+    // "No such file or directory" errors. Run with: cargo test -- --ignored --test-threads=1
+
     #[test]
+    #[ignore = "modifies global CWD, must run with --test-threads=1"]
     #[cfg(unix)]
     fn test_find_config_file_resolves_symlinks() {
         use std::os::unix::fs::symlink;
@@ -1087,7 +1098,6 @@ description = "Test"
         let found_path = result.expect("find config");
 
         // The path should be resolved to the real location (not through symlink)
-        // After canonicalization, the path should not contain "link"
         let path_str = found_path.to_string_lossy();
         assert!(
             !path_str.contains("link"),
@@ -1100,6 +1110,7 @@ description = "Test"
     }
 
     #[test]
+    #[ignore = "modifies global CWD, must run with --test-threads=1"]
     fn test_find_config_file_walks_up_canonicalized_tree() {
         use tempfile::TempDir;
 
@@ -1126,5 +1137,14 @@ description = "Test"
         assert!(found_path.is_absolute());
         assert!(found_path.exists());
         assert!(found_path.ends_with(CONFIG_FILE_NAME));
+
+        // Verify we found the config at temp root
+        assert_eq!(
+            found_path,
+            temp.path()
+                .join(CONFIG_FILE_NAME)
+                .canonicalize()
+                .expect("canonicalize")
+        );
     }
 }

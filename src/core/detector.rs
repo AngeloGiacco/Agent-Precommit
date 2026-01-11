@@ -341,7 +341,9 @@ mod tests {
 
     #[test]
     fn test_mode_parse_error_message() {
-        let err = "invalid".parse::<Mode>().expect_err("should fail to parse invalid");
+        let err = "invalid"
+            .parse::<Mode>()
+            .expect_err("should fail to parse invalid");
         assert!(err.contains("Invalid mode"));
         assert!(err.contains("human, agent, or ci"));
     }
