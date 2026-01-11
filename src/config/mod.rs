@@ -658,7 +658,9 @@ mod tests {
         config.human.timeout = "invalid".to_string();
         let result = config.validate();
         assert!(result.is_err());
-        let err_msg = result.expect_err("should fail for invalid timeout").to_string();
+        let err_msg = result
+            .expect_err("should fail for invalid timeout")
+            .to_string();
         assert!(err_msg.contains("Invalid duration"));
     }
 
@@ -875,7 +877,10 @@ mod tests {
             env: HashMap::new(),
         };
         assert!(check.enabled_if.is_some());
-        let condition = check.enabled_if.as_ref().expect("enabled_if should be Some");
+        let condition = check
+            .enabled_if
+            .as_ref()
+            .expect("enabled_if should be Some");
         assert_eq!(condition.file_exists, Some("Cargo.toml".to_string()));
     }
 

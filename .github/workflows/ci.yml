@@ -15,7 +15,7 @@ env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
   # Minimum supported Rust version
-  MSRV: "1.75"
+  MSRV: "1.82"
 
 jobs:
   # ==========================================================================
@@ -85,7 +85,7 @@ jobs:
   # MSRV check
   # ==========================================================================
   msrv:
-    name: MSRV (1.75)
+    name: MSRV (1.82)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
