@@ -480,6 +480,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(unix)]
     async fn test_execute_with_environment_variable() {
         let executor = Executor::new();
         let result = executor
@@ -496,6 +497,24 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(windows)]
+    async fn test_execute_with_environment_variable() {
+        let executor = Executor::new();
+        let result = executor
+            .execute(
+                "echo %TEST_VAR%",
+                ExecuteOptions::default().env("TEST_VAR", "test_value"),
+            )
+            .await;
+
+        assert!(result.is_ok());
+        let output = result.expect("should succeed");
+        assert!(output.success());
+        assert!(output.stdout.contains("test_value"));
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
     async fn test_execute_with_working_directory() {
         let executor = Executor::new();
         let result = executor
@@ -506,6 +525,25 @@ mod tests {
         let output = result.expect("should succeed");
         assert!(output.success());
         assert!(output.stdout.contains("/tmp") || output.stdout.contains("tmp"));
+    }
+
+    #[tokio::test]
+    #[cfg(windows)]
+    async fn test_execute_with_working_directory() {
+        let executor = Executor::new();
+        let temp_dir = std::env::temp_dir();
+        let result = executor
+            .execute(
+                "cd",
+                ExecuteOptions::default().cwd(temp_dir.to_str().expect("temp dir")),
+            )
+            .await;
+
+        assert!(result.is_ok());
+        let output = result.expect("should succeed");
+        assert!(output.success());
+        // On Windows, cd prints the current directory
+        assert!(!output.stdout.is_empty());
     }
 
     #[tokio::test]
