@@ -1061,7 +1061,13 @@ description = "Test"
         assert!(found_path.exists());
     }
 
+    // NOTE: These tests are ignored because they modify the global current working
+    // directory, which causes race conditions when tests run in parallel. The CWD
+    // change can interfere with other tests, and temp directory cleanup can cause
+    // "No such file or directory" errors. Run with: cargo test -- --ignored --test-threads=1
+
     #[test]
+    #[ignore = "modifies global CWD, must run with --test-threads=1"]
     #[cfg(unix)]
     fn test_find_config_file_resolves_symlinks() {
         use std::os::unix::fs::symlink;
@@ -1092,28 +1098,19 @@ description = "Test"
         let found_path = result.expect("find config");
 
         // The path should be resolved to the real location (not through symlink)
-        // After canonicalization, the path should not contain "link"
         let path_str = found_path.to_string_lossy();
-
-        // Only validate symlink resolution if we found a config in our temp directory
-        // (parallel tests may affect current directory, causing us to find a different config)
-        let temp_path_str = temp.path().to_string_lossy();
-        if path_str.contains(&*temp_path_str) {
-            assert!(
-                !path_str.contains("link"),
-                "Path should be canonicalized: {path_str}"
-            );
-            assert!(
-                path_str.contains("real"),
-                "Path should resolve to real dir: {path_str}"
-            );
-        }
-        // If we found a config outside temp dir, the test is inconclusive due to
-        // parallel test interference with current directory, but at least we verified
-        // that find_config_file() doesn't crash
+        assert!(
+            !path_str.contains("link"),
+            "Path should be canonicalized: {path_str}"
+        );
+        assert!(
+            path_str.contains("real"),
+            "Path should resolve to real dir: {path_str}"
+        );
     }
 
     #[test]
+    #[ignore = "modifies global CWD, must run with --test-threads=1"]
     fn test_find_config_file_walks_up_canonicalized_tree() {
         use tempfile::TempDir;
 
@@ -1133,29 +1130,21 @@ description = "Test"
         let result = Config::find_config_file();
         std::env::set_current_dir(original_dir).expect("restore cwd");
 
-        // find_config_file should succeed (may find our temp config or another config
-        // if parallel tests interfere with current directory)
         assert!(result.is_ok());
         let found_path = result.expect("find config");
 
-        // Basic validation that we got a valid config path
+        // Should find the config in the parent directory
         assert!(found_path.is_absolute());
         assert!(found_path.exists());
         assert!(found_path.ends_with(CONFIG_FILE_NAME));
 
-        // Only validate that we found our temp config if path is in temp directory
-        // (parallel tests may affect current directory)
-        let path_str = found_path.to_string_lossy();
-        let temp_path_str = temp.path().to_string_lossy();
-        if path_str.contains(&*temp_path_str) {
-            // Verify we found the config at temp root, not deeper
-            assert_eq!(
-                found_path,
-                temp.path()
-                    .join(CONFIG_FILE_NAME)
-                    .canonicalize()
-                    .expect("canonicalize")
-            );
-        }
+        // Verify we found the config at temp root
+        assert_eq!(
+            found_path,
+            temp.path()
+                .join(CONFIG_FILE_NAME)
+                .canonicalize()
+                .expect("canonicalize")
+        );
     }
 }
