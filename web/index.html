@@ -7,7 +7,7 @@
     <meta name="description" content="Pre-commit hooks that know when an AI is committing. Run fast checks for humans, thorough checks for agents.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -15,21 +15,10 @@
             box-sizing: border-box;
         }
 
-        :root {
-            --bg: #fafafa;
-            --bg-alt: #f0f2f5;
-            --text: #1a1a2e;
-            --text-muted: #5a5a6e;
-            --accent: #3b5bdb;
-            --accent-light: #e7ecff;
-            --border: #e1e4e8;
-            --card-bg: #ffffff;
-        }
-
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: var(--bg);
-            color: var(--text);
+            background: #eeeae4;
+            color: #2d2926;
             line-height: 1.5;
         }
 
@@ -43,33 +32,24 @@
         }
 
         .logo {
-            font-family: 'JetBrains Mono', monospace;
+            font-family: 'Space Mono', monospace;
             font-weight: 700;
             font-size: 18px;
+            text-transform: uppercase;
             letter-spacing: -0.5px;
-            color: var(--text);
-        }
-
-        .logo::before {
-            content: '>';
-            color: var(--accent);
-            margin-right: 6px;
         }
 
         nav a {
-            color: var(--text);
+            color: #2d2926;
             text-decoration: none;
             font-size: 15px;
             display: flex;
             align-items: center;
             gap: 6px;
-            padding: 8px 16px;
-            border-radius: 6px;
-            transition: background 0.2s;
         }
 
         nav a:hover {
-            background: var(--bg-alt);
+            text-decoration: underline;
         }
 
         nav a svg {
@@ -89,57 +69,47 @@
         }
 
         h1 {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: clamp(38px, 7vw, 64px);
+            font-family: 'Space Mono', monospace;
+            font-size: clamp(42px, 8vw, 72px);
             font-weight: 700;
-            line-height: 1.1;
-            letter-spacing: -1.5px;
-            max-width: 800px;
+            line-height: 1.05;
+            letter-spacing: -2px;
+            max-width: 900px;
         }
 
         .highlight {
-            display: inline;
-            background: linear-gradient(120deg, var(--accent-light) 0%, var(--accent-light) 100%);
-            background-repeat: no-repeat;
-            background-size: 100% 40%;
-            background-position: 0 85%;
-            padding: 0 4px;
+            display: inline-block;
+            border: 2px dashed #2d2926;
+            padding: 0 8px;
         }
 
         .hero-desc {
-            font-size: 19px;
-            color: var(--text-muted);
-            max-width: 620px;
-            margin: 28px 0 36px;
-            line-height: 1.65;
+            font-size: 20px;
+            color: #444;
+            max-width: 640px;
+            margin: 32px 0 40px;
+            line-height: 1.6;
         }
 
         .install-box {
-            display: inline-flex;
-            align-items: center;
-            background: var(--text);
-            color: #e5e5e5;
+            display: inline-block;
+            background: #fff;
+            border: 1px solid #ddd;
             padding: 14px 24px;
-            border-radius: 8px;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 14px;
-            gap: 12px;
-        }
-
-        .install-box::before {
-            content: '$';
-            color: #888;
+            font-family: 'Space Mono', monospace;
+            font-size: 15px;
         }
 
         /* Modes */
         .modes {
             padding: 80px 0;
+            border-top: 1px solid #ddd;
         }
 
         .modes-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 20px;
+            gap: 24px;
         }
 
         @media (max-width: 700px) {
@@ -149,78 +119,58 @@
         }
 
         .mode-card {
-            background: var(--card-bg);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 36px;
-            transition: box-shadow 0.2s;
-        }
-
-        .mode-card:hover {
-            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
-        }
-
-        .mode-card.human {
-            border-top: 3px solid #22c55e;
-        }
-
-        .mode-card.agent {
-            border-top: 3px solid var(--accent);
+            background: #fff;
+            border: 1px solid #ddd;
+            padding: 40px;
         }
 
         .mode-label {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 12px;
+            font-family: 'Space Mono', monospace;
+            font-size: 13px;
             text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: var(--text-muted);
+            letter-spacing: 1px;
+            color: #666;
             margin-bottom: 12px;
         }
 
         .mode-time {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 44px;
+            font-family: 'Space Mono', monospace;
+            font-size: 48px;
             font-weight: 700;
-            margin-bottom: 12px;
-            color: var(--text);
+            margin-bottom: 16px;
         }
 
         .mode-desc {
-            color: var(--text-muted);
-            font-size: 15px;
+            color: #555;
+            font-size: 16px;
             line-height: 1.6;
         }
 
         /* How */
         .how {
             padding: 80px 0;
+            border-top: 1px solid #ddd;
         }
 
         .section-title {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 28px;
+            font-family: 'Space Mono', monospace;
+            font-size: 32px;
             font-weight: 700;
-            margin-bottom: 32px;
-            color: var(--text);
+            margin-bottom: 40px;
         }
 
         .flow-box {
-            background: #0d1117;
-            color: #c9d1d9;
-            padding: 32px 36px;
-            border-radius: 12px;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 13px;
-            line-height: 1.9;
+            background: #2d2926;
+            color: #e5e5e5;
+            padding: 40px;
+            font-family: 'Space Mono', monospace;
+            font-size: 14px;
+            line-height: 1.8;
             overflow-x: auto;
         }
 
         .flow-box .dim {
-            color: #6e7681;
-        }
-
-        .flow-box .cmd {
-            color: #58a6ff;
+            color: #666;
         }
 
         .agents-row {
@@ -231,24 +181,23 @@
         }
 
         .agent-tag {
-            background: var(--bg-alt);
-            border: 1px solid var(--border);
-            border-radius: 6px;
+            background: #fff;
+            border: 1px solid #ddd;
             padding: 8px 14px;
-            font-family: 'JetBrains Mono', monospace;
+            font-family: 'Space Mono', monospace;
             font-size: 13px;
-            color: var(--text-muted);
         }
 
         /* Features */
         .features {
             padding: 80px 0;
+            border-top: 1px solid #ddd;
         }
 
         .features-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 24px;
+            gap: 32px;
         }
 
         @media (max-width: 800px) {
@@ -263,134 +212,110 @@
             }
         }
 
-        .feature {
-            padding: 24px;
-            background: var(--card-bg);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-        }
-
         .feature h3 {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 15px;
-            font-weight: 600;
+            font-family: 'Space Mono', monospace;
+            font-size: 16px;
+            font-weight: 700;
             margin-bottom: 8px;
-            color: var(--text);
         }
 
         .feature p {
-            color: var(--text-muted);
-            font-size: 14px;
+            color: #555;
+            font-size: 15px;
             line-height: 1.6;
         }
 
         /* Setup */
         .setup {
             padding: 80px 0;
+            border-top: 1px solid #ddd;
         }
 
         .code-block {
-            background: #0d1117;
-            color: #c9d1d9;
-            padding: 28px 32px;
-            border-radius: 12px;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 13px;
+            background: #2d2926;
+            color: #e5e5e5;
+            padding: 32px 40px;
+            font-family: 'Space Mono', monospace;
+            font-size: 14px;
             line-height: 2;
             overflow-x: auto;
         }
 
         .code-block .comment {
-            color: #8b949e;
-        }
-
-        .code-block .cmd {
-            color: #58a6ff;
+            color: #666;
         }
 
         /* Presets */
         .presets {
             padding: 80px 0;
-        }
-
-        .presets-desc {
-            color: var(--text-muted);
-            font-size: 16px;
-            margin-bottom: 20px;
+            border-top: 1px solid #ddd;
         }
 
         .preset-row {
             display: flex;
             flex-wrap: wrap;
-            gap: 10px;
+            gap: 12px;
+            margin-top: 24px;
         }
 
         .preset-tag {
-            background: var(--accent);
+            background: #2d2926;
             color: #fff;
-            padding: 10px 20px;
-            border-radius: 6px;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 14px;
-            font-weight: 600;
+            padding: 12px 24px;
+            font-family: 'Space Mono', monospace;
+            font-size: 15px;
+            font-weight: 700;
         }
 
         /* CTA */
         .cta {
             padding: 100px 0;
-            text-align: center;
+            border-top: 1px solid #ddd;
         }
 
         .cta h2 {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: clamp(28px, 5vw, 40px);
+            font-family: 'Space Mono', monospace;
+            font-size: clamp(32px, 5vw, 48px);
             font-weight: 700;
-            margin-bottom: 28px;
-            color: var(--text);
+            margin-bottom: 32px;
         }
 
         .btn {
             display: inline-flex;
             align-items: center;
             gap: 10px;
-            background: var(--text);
+            background: #2d2926;
             color: #fff;
-            padding: 14px 28px;
+            padding: 16px 32px;
             text-decoration: none;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 14px;
-            font-weight: 600;
-            border-radius: 8px;
-            transition: transform 0.2s, box-shadow 0.2s;
+            font-family: 'Space Mono', monospace;
+            font-size: 15px;
+            font-weight: 700;
+            transition: background 0.2s;
         }
 
         .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+            background: #3d3a36;
         }
 
         .btn svg {
-            width: 18px;
-            height: 18px;
+            width: 20px;
+            height: 20px;
         }
 
         /* Footer */
         footer {
             padding: 32px 0;
-            border-top: 1px solid var(--border);
+            border-top: 1px solid #ddd;
         }
 
         footer p {
             font-size: 14px;
-            color: var(--text-muted);
+            color: #666;
         }
 
         footer a {
-            color: var(--accent);
-            text-decoration: none;
-        }
-
-        footer a:hover {
+            color: #666;
             text-decoration: underline;
         }
     </style>
@@ -413,12 +338,12 @@
 
         <section class="modes">
             <div class="modes-grid">
-                <div class="mode-card human">
+                <div class="mode-card">
                     <div class="mode-label">Human commits</div>
                     <div class="mode-time">~3s</div>
                     <div class="mode-desc">Fast checks on staged files. Lint, format, type-check. You get feedback instantly and keep your flow.</div>
                 </div>
-                <div class="mode-card agent">
+                <div class="mode-card">
                     <div class="mode-label">Agent commits</div>
                     <div class="mode-time">~5m</div>
                     <div class="mode-desc">Full test suite, security scans, build verification. The agent waits. You get merge-ready code that passes CI.</div>
@@ -429,7 +354,7 @@
         <section class="how">
             <h2 class="section-title">How it works</h2>
             <div class="flow-box">
-<span class="cmd">git commit</span><br>
+git commit<br>
 <span class="dim">    |</span><br>
 <span class="dim">    v</span><br>
 .git/hooks/pre-commit <span class="dim"># installed by apc</span><br>
@@ -485,13 +410,13 @@ detect commit source <span class="dim"># env vars, TTY, process tree</span><br>
             <h2 class="section-title">Setup</h2>
             <div class="code-block">
 <span class="comment"># install</span><br>
-<span class="cmd">cargo install agent-precommit</span><br>
+cargo install agent-precommit<br>
 <br>
 <span class="comment"># init config (detects your stack)</span><br>
-<span class="cmd">apc init --preset=rust</span><br>
+apc init --preset=rust<br>
 <br>
 <span class="comment"># install git hook</span><br>
-<span class="cmd">apc install</span><br>
+apc install<br>
 <br>
 <span class="comment"># add to your agent instructions (CLAUDE.md, .cursor/rules):</span><br>
 <span class="comment"># "Use AGENT_MODE=1 git commit when committing"</span>
@@ -500,7 +425,7 @@ detect commit source <span class="dim"># env vars, TTY, process tree</span><br>
 
         <section class="presets">
             <h2 class="section-title">Presets</h2>
-            <p class="presets-desc">Sensible defaults for common stacks.</p>
+            <p style="color: #555; font-size: 16px;">Sensible defaults for common stacks.</p>
             <div class="preset-row">
                 <span class="preset-tag">python</span>
                 <span class="preset-tag">node</span>
