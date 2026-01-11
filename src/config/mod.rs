@@ -1151,7 +1151,10 @@ description = "Test"
             // Verify we found the config at temp root, not deeper
             assert_eq!(
                 found_path,
-                temp.path().join(CONFIG_FILE_NAME).canonicalize().expect("canonicalize")
+                temp.path()
+                    .join(CONFIG_FILE_NAME)
+                    .canonicalize()
+                    .expect("canonicalize")
             );
         }
     }
