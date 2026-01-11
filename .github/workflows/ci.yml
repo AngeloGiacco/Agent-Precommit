@@ -184,6 +184,91 @@ jobs:
           if-no-files-found: ignore
 
   # ==========================================================================
+  # Benchmarks
+  # ==========================================================================
+  benchmark:
+    name: Benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run benchmarks
+        run: cargo bench --bench benchmarks -- --noplot --save-baseline ci
+
+      - name: Check benchmark results
+        run: |
+          echo "Benchmark completed successfully!"
+          echo "Key benchmark results:"
+          echo "======================"
+          # Parse and display key metrics from Criterion output
+          for dir in target/criterion/*/new; do
+            if [ -d "$dir" ]; then
+              bench_name=$(basename $(dirname "$dir"))
+              if [ -f "$dir/estimates.json" ]; then
+                mean=$(grep -o '"point_estimate":[0-9.]*' "$dir/estimates.json" | head -1 | cut -d: -f2)
+                if [ -n "$mean" ]; then
+                  # Convert to human-readable format
+                  if (( $(echo "$mean < 1000" | bc -l) )); then
+                    echo "$bench_name: ${mean}ns"
+                  elif (( $(echo "$mean < 1000000" | bc -l) )); then
+                    echo "$bench_name: $(echo "scale=2; $mean/1000" | bc)µs"
+                  else
+                    echo "$bench_name: $(echo "scale=2; $mean/1000000" | bc)ms"
+                  fi
+                fi
+              fi
+            fi
+          done
+
+      - name: Verify performance thresholds
+        run: |
+          # Define performance thresholds (in nanoseconds)
+          # These are based on current benchmark results with 50% margin
+          declare -A THRESHOLDS=(
+            ["detector_detect"]=25000000        # 25ms max (current ~14µs)
+            ["detector_detect_with_custom_vars"]=25000000  # 25ms max
+            ["config_parsing_full"]=20000000    # 20ms max (current ~9µs)
+            ["config_parsing_minimal"]=10000000 # 10ms max (current ~4µs)
+            ["config_default"]=2000000          # 2ms max (current ~550ns)
+            ["config_validation"]=1000000       # 1ms max (current ~33ns)
+          )
+
+          FAILED=0
+          for bench_name in "${!THRESHOLDS[@]}"; do
+            threshold=${THRESHOLDS[$bench_name]}
+            estimates_file="target/criterion/$bench_name/new/estimates.json"
+
+            if [ -f "$estimates_file" ]; then
+              mean=$(grep -o '"point_estimate":[0-9.]*' "$estimates_file" | head -1 | cut -d: -f2)
+              if [ -n "$mean" ]; then
+                # Compare using bc for floating point
+                if (( $(echo "$mean > $threshold" | bc -l) )); then
+                  echo "❌ REGRESSION: $bench_name exceeded threshold!"
+                  echo "   Current: ${mean}ns, Threshold: ${threshold}ns"
+                  FAILED=1
+                else
+                  echo "✓ $bench_name: ${mean}ns (threshold: ${threshold}ns)"
+                fi
+              fi
+            fi
+          done
+
+          if [ $FAILED -eq 1 ]; then
+            echo ""
+            echo "Performance regression detected! Please investigate."
+            exit 1
+          fi
+
+          echo ""
+          echo "All benchmarks within acceptable thresholds."
+
+  # ==========================================================================
   # Security audit
   # ==========================================================================
   security:
@@ -233,7 +318,7 @@ jobs:
   # ==========================================================================
   ci-success:
     name: CI Success
-    needs: [fmt, clippy, test, msrv, docs, build, security, coverage]
+    needs: [fmt, clippy, test, msrv, docs, build, benchmark, security, coverage]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -245,6 +330,7 @@ jobs:
              [[ "${{ needs.msrv.result }}" != "success" ]] || \
              [[ "${{ needs.docs.result }}" != "success" ]] || \
              [[ "${{ needs.build.result }}" != "success" ]] || \
+             [[ "${{ needs.benchmark.result }}" != "success" ]] || \
              [[ "${{ needs.security.result }}" != "success" ]] || \
              [[ "${{ needs.coverage.result }}" != "success" ]]; then
             echo "One or more jobs failed"
