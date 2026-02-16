@@ -537,4 +537,353 @@ mod tests {
     fn test_known_ci_env_vars_contains_gitlab_ci() {
         assert!(KNOWN_CI_ENV_VARS.contains(&"GITLAB_CI"));
     }
+
+    // =========================================================================
+    // Detector.detect() tests with env var control
+    //
+    // These tests modify process-global env vars, so they must run with
+    // --test-threads=1. They are ignored in default parallel test runs.
+    // Run with: cargo test -- --ignored --test-threads=1
+    // =========================================================================
+
+    /// Env var manipulation helpers for tests.
+    ///
+    /// These tests are `#[ignore]`d by default and must be run with
+    /// `--test-threads=1` to avoid data races on process env vars.
+    #[allow(deprecated, unsafe_code)]
+    mod env_helpers {
+        use std::env;
+
+        pub struct EnvGuard {
+            vars: Vec<(String, Option<String>)>,
+        }
+
+        impl EnvGuard {
+            pub fn new() -> Self {
+                Self { vars: Vec::new() }
+            }
+
+            pub fn set(&mut self, key: &str, value: &str) {
+                let prev = env::var(key).ok();
+                self.vars.push((key.to_string(), prev));
+                // SAFETY: These tests run single-threaded via --test-threads=1
+                unsafe { env::set_var(key, value) };
+            }
+
+            pub fn remove(&mut self, key: &str) {
+                let prev = env::var(key).ok();
+                self.vars.push((key.to_string(), prev));
+                // SAFETY: These tests run single-threaded via --test-threads=1
+                unsafe { env::remove_var(key) };
+            }
+
+            /// Remove all known detection env vars to get a clean state.
+            pub fn clear_all_detection_vars(&mut self) {
+                self.remove("APC_MODE");
+                self.remove("AGENT_MODE");
+                for var in super::super::KNOWN_AGENT_ENV_VARS {
+                    self.remove(var);
+                }
+                for var in super::super::KNOWN_CI_ENV_VARS {
+                    self.remove(var);
+                }
+            }
+        }
+
+        impl Drop for EnvGuard {
+            fn drop(&mut self) {
+                for (key, value) in self.vars.iter().rev() {
+                    match value {
+                        // SAFETY: These tests run single-threaded via --test-threads=1
+                        Some(v) => unsafe { env::set_var(key, v) },
+                        None => unsafe { env::remove_var(key) },
+                    }
+                }
+            }
+        }
+    }
+
+    use env_helpers::EnvGuard;
+
+    #[test]
+    #[ignore = "modifies global env vars, must run with --test-threads=1"]
+    fn test_detect_apc_mode_human() {
+        let mut guard = EnvGuard::new();
+        guard.clear_all_detection_vars();
+        guard.set("APC_MODE", "human");
+
+        let config = Config::default();
+        let detector = Detector::new(&config);
+        let detection = detector.detect();
+
+        assert_eq!(detection.mode, Mode::Human);
+        assert!(matches!(
+            detection.reason,
+            DetectionReason::ExplicitApcMode(_)
+        ));
+    }
+
+    #[test]
+    #[ignore = "modifies global env vars, must run with --test-threads=1"]
+    fn test_detect_apc_mode_agent() {
+        let mut guard = EnvGuard::new();
+        guard.clear_all_detection_vars();
+        guard.set("APC_MODE", "agent");
+
+        let config = Config::default();
+        let detector = Detector::new(&config);
+        let detection = detector.detect();
+
+        assert_eq!(detection.mode, Mode::Agent);
+        assert!(matches!(
+            detection.reason,
+            DetectionReason::ExplicitApcMode(_)
+        ));
+    }
+
+    #[test]
+    #[ignore = "modifies global env vars, must run with --test-threads=1"]
+    fn test_detect_apc_mode_ci() {
+        let mut guard = EnvGuard::new();
+        guard.clear_all_detection_vars();
+        guard.set("APC_MODE", "ci");
+
+        let config = Config::default();
+        let detector = Detector::new(&config);
+        let detection = detector.detect();
+
+        assert_eq!(detection.mode, Mode::Ci);
+    }
+
+    #[test]
+    #[ignore = "modifies global env vars, must run with --test-threads=1"]
+    fn test_detect_apc_mode_invalid_falls_back_to_human() {
+        let mut guard = EnvGuard::new();
+        guard.clear_all_detection_vars();
+        guard.set("APC_MODE", "invalid_value");
+
+        let config = Config::default();
+        let detector = Detector::new(&config);
+        let detection = detector.detect();
+
+        // Invalid APC_MODE parses to Human (the unwrap_or default)
+        assert_eq!(detection.mode, Mode::Human);
+    }
+
+    #[test]
+    #[ignore = "modifies global env vars, must run with --test-threads=1"]
+    fn test_detect_agent_mode_flag() {
+        let mut guard = EnvGuard::new();
+        guard.clear_all_detection_vars();
+        guard.set("AGENT_MODE", "1");
+
+        let config = Config::default();
+        let detector = Detector::new(&config);
+        let detection = detector.detect();
+
+        assert_eq!(detection.mode, Mode::Agent);
+        assert_eq!(detection.reason, DetectionReason::ExplicitAgentMode);
+    }
+
+    #[test]
+    #[ignore = "modifies global env vars, must run with --test-threads=1"]
+    fn test_detect_agent_mode_flag_true() {
+        let mut guard = EnvGuard::new();
+        guard.clear_all_detection_vars();
+        guard.set("AGENT_MODE", "true");
+
+        let config = Config::default();
+        let detector = Detector::new(&config);
+        let detection = detector.detect();
+
+        assert_eq!(detection.mode, Mode::Agent);
+        assert_eq!(detection.reason, DetectionReason::ExplicitAgentMode);
+    }
+
+    #[test]
+    #[ignore = "modifies global env vars, must run with --test-threads=1"]
+    fn test_detect_agent_mode_flag_false_ignored() {
+        let mut guard = EnvGuard::new();
+        guard.clear_all_detection_vars();
+        guard.set("AGENT_MODE", "0");
+
+        let config = Config::default();
+        let detector = Detector::new(&config);
+        let detection = detector.detect();
+
+        // AGENT_MODE=0 should NOT trigger agent mode
+        assert_ne!(detection.reason, DetectionReason::ExplicitAgentMode);
+    }
+
+    #[test]
+    #[ignore = "modifies global env vars, must run with --test-threads=1"]
+    fn test_detect_known_agent_env_var_claude_code() {
+        let mut guard = EnvGuard::new();
+        guard.clear_all_detection_vars();
+        guard.set("CLAUDE_CODE", "1");
+
+        let config = Config::default();
+        let detector = Detector::new(&config);
+        let detection = detector.detect();
+
+        assert_eq!(detection.mode, Mode::Agent);
+        assert_eq!(
+            detection.reason,
+            DetectionReason::KnownAgentEnvVar("CLAUDE_CODE".to_string())
+        );
+    }
+
+    #[test]
+    #[ignore = "modifies global env vars, must run with --test-threads=1"]
+    fn test_detect_known_agent_env_var_cursor() {
+        let mut guard = EnvGuard::new();
+        guard.clear_all_detection_vars();
+        guard.set("CURSOR_SESSION", "test-session");
+
+        let config = Config::default();
+        let detector = Detector::new(&config);
+        let detection = detector.detect();
+
+        assert_eq!(detection.mode, Mode::Agent);
+        assert_eq!(
+            detection.reason,
+            DetectionReason::KnownAgentEnvVar("CURSOR_SESSION".to_string())
+        );
+    }
+
+    #[test]
+    #[ignore = "modifies global env vars, must run with --test-threads=1"]
+    fn test_detect_custom_agent_env_var() {
+        let mut guard = EnvGuard::new();
+        guard.clear_all_detection_vars();
+        guard.set("MY_CUSTOM_AGENT_VAR_12345", "1");
+
+        let mut config = Config::default();
+        config.detection.agent_env_vars = vec!["MY_CUSTOM_AGENT_VAR_12345".to_string()];
+
+        let detector = Detector::new(&config);
+        let detection = detector.detect();
+
+        assert_eq!(detection.mode, Mode::Agent);
+        assert_eq!(
+            detection.reason,
+            DetectionReason::CustomAgentEnvVar("MY_CUSTOM_AGENT_VAR_12345".to_string())
+        );
+
+        // Clean up via the guard's drop
+        guard.remove("MY_CUSTOM_AGENT_VAR_12345");
+    }
+
+    #[test]
+    #[ignore = "modifies global env vars, must run with --test-threads=1"]
+    fn test_detect_ci_environment() {
+        let mut guard = EnvGuard::new();
+        guard.clear_all_detection_vars();
+        guard.set("GITHUB_ACTIONS", "true");
+
+        let config = Config::default();
+        let detector = Detector::new(&config);
+        let detection = detector.detect();
+
+        assert_eq!(detection.mode, Mode::Ci);
+        assert_eq!(
+            detection.reason,
+            DetectionReason::CiEnvironment("GITHUB_ACTIONS".to_string())
+        );
+    }
+
+    #[test]
+    #[ignore = "modifies global env vars, must run with --test-threads=1"]
+    fn test_detect_priority_apc_mode_over_agent_mode() {
+        let mut guard = EnvGuard::new();
+        guard.clear_all_detection_vars();
+        guard.set("APC_MODE", "human");
+        guard.set("AGENT_MODE", "1");
+
+        let config = Config::default();
+        let detector = Detector::new(&config);
+        let detection = detector.detect();
+
+        // APC_MODE should take priority over AGENT_MODE
+        assert_eq!(detection.mode, Mode::Human);
+        assert!(matches!(
+            detection.reason,
+            DetectionReason::ExplicitApcMode(_)
+        ));
+    }
+
+    #[test]
+    #[ignore = "modifies global env vars, must run with --test-threads=1"]
+    fn test_detect_priority_agent_mode_over_known_vars() {
+        let mut guard = EnvGuard::new();
+        guard.clear_all_detection_vars();
+        guard.set("AGENT_MODE", "1");
+        guard.set("CI", "true");
+
+        let config = Config::default();
+        let detector = Detector::new(&config);
+        let detection = detector.detect();
+
+        // AGENT_MODE should take priority over CI
+        assert_eq!(detection.mode, Mode::Agent);
+        assert_eq!(detection.reason, DetectionReason::ExplicitAgentMode);
+    }
+
+    #[test]
+    #[ignore = "modifies global env vars, must run with --test-threads=1"]
+    fn test_detect_priority_known_vars_over_ci() {
+        let mut guard = EnvGuard::new();
+        guard.clear_all_detection_vars();
+        guard.set("CLAUDE_CODE", "1");
+        guard.set("CI", "true");
+
+        let config = Config::default();
+        let detector = Detector::new(&config);
+        let detection = detector.detect();
+
+        // Known agent vars should take priority over CI
+        assert_eq!(detection.mode, Mode::Agent);
+        assert!(matches!(
+            detection.reason,
+            DetectionReason::KnownAgentEnvVar(_)
+        ));
+    }
+
+    #[test]
+    fn test_known_agent_env_vars_no_duplicates() {
+        let mut seen = std::collections::HashSet::new();
+        for var in KNOWN_AGENT_ENV_VARS {
+            assert!(seen.insert(var), "Duplicate agent env var: {}", var);
+        }
+    }
+
+    #[test]
+    fn test_known_ci_env_vars_no_duplicates() {
+        let mut seen = std::collections::HashSet::new();
+        for var in KNOWN_CI_ENV_VARS {
+            assert!(seen.insert(var), "Duplicate CI env var: {}", var);
+        }
+    }
+
+    #[test]
+    fn test_known_agent_and_ci_vars_no_overlap() {
+        for agent_var in KNOWN_AGENT_ENV_VARS {
+            assert!(
+                !KNOWN_CI_ENV_VARS.contains(agent_var),
+                "Env var {} appears in both agent and CI lists",
+                agent_var
+            );
+        }
+    }
+
+    #[test]
+    fn test_mode_hash() {
+        let mut set = std::collections::HashSet::new();
+        set.insert(Mode::Human);
+        set.insert(Mode::Agent);
+        set.insert(Mode::Ci);
+        assert_eq!(set.len(), 3);
+        set.insert(Mode::Human);
+        assert_eq!(set.len(), 3);
+    }
 }

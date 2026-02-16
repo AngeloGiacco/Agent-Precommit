@@ -215,8 +215,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_cli_parsing() {
-        // Test that CLI parses without errors
+    fn test_cli_parsing_help() {
         let cli = Cli::try_parse_from(["apc", "--help"]);
         // --help causes early exit, so this will be an error
         assert!(cli.is_err());
@@ -228,15 +227,329 @@ mod tests {
         assert!(cli.is_err()); // --version causes early exit
     }
 
+    // =========================================================================
+    // Subcommand parsing tests
+    // =========================================================================
+
     #[test]
-    fn test_cli_subcommands() {
-        let cli = Cli::try_parse_from(["apc", "init"]);
-        assert!(cli.is_ok());
+    fn test_parse_init() {
+        let cli = Cli::try_parse_from(["apc", "init"]).expect("parse init");
+        assert!(matches!(
+            cli.command,
+            Some(Commands::Init {
+                preset: None,
+                force: false
+            })
+        ));
+    }
 
-        let cli = Cli::try_parse_from(["apc", "run", "--mode", "human"]);
-        assert!(cli.is_ok());
+    #[test]
+    fn test_parse_init_with_preset() {
+        let cli = Cli::try_parse_from(["apc", "init", "--preset", "rust"]).expect("parse");
+        assert!(matches!(
+            cli.command,
+            Some(Commands::Init {
+                preset: Some(_),
+                force: false
+            })
+        ));
+    }
 
-        let cli = Cli::try_parse_from(["apc", "detect"]);
-        assert!(cli.is_ok());
+    #[test]
+    fn test_parse_init_with_force() {
+        let cli = Cli::try_parse_from(["apc", "init", "--force"]).expect("parse");
+        assert!(matches!(
+            cli.command,
+            Some(Commands::Init {
+                preset: None,
+                force: true
+            })
+        ));
+    }
+
+    #[test]
+    fn test_parse_init_with_preset_and_force() {
+        let cli =
+            Cli::try_parse_from(["apc", "init", "--preset", "python", "--force"]).expect("parse");
+        assert!(matches!(
+            cli.command,
+            Some(Commands::Init {
+                preset: Some(_),
+                force: true
+            })
+        ));
+    }
+
+    #[test]
+    fn test_parse_init_invalid_preset() {
+        let result = Cli::try_parse_from(["apc", "init", "--preset", "invalid"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_init_alias() {
+        let cli = Cli::try_parse_from(["apc", "i"]).expect("parse init alias");
+        assert!(matches!(cli.command, Some(Commands::Init { .. })));
+    }
+
+    #[test]
+    fn test_parse_install() {
+        let cli = Cli::try_parse_from(["apc", "install"]).expect("parse");
+        assert!(matches!(
+            cli.command,
+            Some(Commands::Install { force: false })
+        ));
+    }
+
+    #[test]
+    fn test_parse_install_with_force() {
+        let cli = Cli::try_parse_from(["apc", "install", "--force"]).expect("parse");
+        assert!(matches!(
+            cli.command,
+            Some(Commands::Install { force: true })
+        ));
+    }
+
+    #[test]
+    fn test_parse_uninstall() {
+        let cli = Cli::try_parse_from(["apc", "uninstall"]).expect("parse");
+        assert!(matches!(cli.command, Some(Commands::Uninstall)));
+    }
+
+    #[test]
+    fn test_parse_run() {
+        let cli = Cli::try_parse_from(["apc", "run"]).expect("parse");
+        assert!(matches!(
+            cli.command,
+            Some(Commands::Run {
+                mode: None,
+                check: None,
+                all: false
+            })
+        ));
+    }
+
+    #[test]
+    fn test_parse_run_with_mode() {
+        let cli = Cli::try_parse_from(["apc", "run", "--mode", "human"]).expect("parse");
+        assert!(matches!(
+            cli.command,
+            Some(Commands::Run { mode: Some(_), .. })
+        ));
+    }
+
+    #[test]
+    fn test_parse_run_with_agent_mode() {
+        let cli = Cli::try_parse_from(["apc", "run", "--mode", "agent"]).expect("parse");
+        assert!(matches!(
+            cli.command,
+            Some(Commands::Run { mode: Some(_), .. })
+        ));
+    }
+
+    #[test]
+    fn test_parse_run_with_ci_mode() {
+        let cli = Cli::try_parse_from(["apc", "run", "--mode", "ci"]).expect("parse");
+        assert!(matches!(
+            cli.command,
+            Some(Commands::Run { mode: Some(_), .. })
+        ));
+    }
+
+    #[test]
+    fn test_parse_run_invalid_mode() {
+        let result = Cli::try_parse_from(["apc", "run", "--mode", "invalid"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_run_with_check() {
+        let cli = Cli::try_parse_from(["apc", "run", "--check", "lint"]).expect("parse");
+        assert!(matches!(
+            cli.command,
+            Some(Commands::Run { check: Some(_), .. })
+        ));
+    }
+
+    #[test]
+    fn test_parse_run_with_all() {
+        let cli = Cli::try_parse_from(["apc", "run", "--all"]).expect("parse");
+        assert!(matches!(cli.command, Some(Commands::Run { all: true, .. })));
+    }
+
+    #[test]
+    fn test_parse_run_alias() {
+        let cli = Cli::try_parse_from(["apc", "r"]).expect("parse run alias");
+        assert!(matches!(cli.command, Some(Commands::Run { .. })));
+    }
+
+    #[test]
+    fn test_parse_detect() {
+        let cli = Cli::try_parse_from(["apc", "detect"]).expect("parse");
+        assert!(matches!(cli.command, Some(Commands::Detect)));
+    }
+
+    #[test]
+    fn test_parse_detect_alias() {
+        let cli = Cli::try_parse_from(["apc", "d"]).expect("parse detect alias");
+        assert!(matches!(cli.command, Some(Commands::Detect)));
+    }
+
+    #[test]
+    fn test_parse_list() {
+        let cli = Cli::try_parse_from(["apc", "list"]).expect("parse");
+        assert!(matches!(cli.command, Some(Commands::List { mode: None })));
+    }
+
+    #[test]
+    fn test_parse_list_with_mode() {
+        let cli = Cli::try_parse_from(["apc", "list", "--mode", "human"]).expect("parse");
+        assert!(matches!(
+            cli.command,
+            Some(Commands::List { mode: Some(_) })
+        ));
+    }
+
+    #[test]
+    fn test_parse_list_alias() {
+        let cli = Cli::try_parse_from(["apc", "l"]).expect("parse list alias");
+        assert!(matches!(cli.command, Some(Commands::List { .. })));
+    }
+
+    #[test]
+    fn test_parse_validate() {
+        let cli = Cli::try_parse_from(["apc", "validate"]).expect("parse");
+        assert!(matches!(cli.command, Some(Commands::Validate)));
+    }
+
+    #[test]
+    fn test_parse_validate_alias() {
+        let cli = Cli::try_parse_from(["apc", "v"]).expect("parse validate alias");
+        assert!(matches!(cli.command, Some(Commands::Validate)));
+    }
+
+    #[test]
+    fn test_parse_config() {
+        let cli = Cli::try_parse_from(["apc", "config"]).expect("parse");
+        assert!(matches!(cli.command, Some(Commands::Config { raw: false })));
+    }
+
+    #[test]
+    fn test_parse_config_raw() {
+        let cli = Cli::try_parse_from(["apc", "config", "--raw"]).expect("parse");
+        assert!(matches!(cli.command, Some(Commands::Config { raw: true })));
+    }
+
+    #[test]
+    fn test_parse_completions_bash() {
+        let cli = Cli::try_parse_from(["apc", "completions", "bash"]).expect("parse");
+        assert!(matches!(cli.command, Some(Commands::Completions { .. })));
+    }
+
+    #[test]
+    fn test_parse_completions_zsh() {
+        let cli = Cli::try_parse_from(["apc", "completions", "zsh"]).expect("parse");
+        assert!(matches!(cli.command, Some(Commands::Completions { .. })));
+    }
+
+    #[test]
+    fn test_parse_completions_fish() {
+        let cli = Cli::try_parse_from(["apc", "completions", "fish"]).expect("parse");
+        assert!(matches!(cli.command, Some(Commands::Completions { .. })));
+    }
+
+    // =========================================================================
+    // Global flags tests
+    // =========================================================================
+
+    #[test]
+    fn test_parse_verbose_flag() {
+        let cli = Cli::try_parse_from(["apc", "--verbose", "detect"]).expect("parse");
+        assert!(cli.verbose);
+        assert!(!cli.quiet);
+    }
+
+    #[test]
+    fn test_parse_quiet_flag() {
+        let cli = Cli::try_parse_from(["apc", "--quiet", "detect"]).expect("parse");
+        assert!(!cli.verbose);
+        assert!(cli.quiet);
+    }
+
+    #[test]
+    fn test_parse_color_always() {
+        let cli = Cli::try_parse_from(["apc", "--color", "always", "detect"]).expect("parse");
+        assert_eq!(cli.color, ColorChoice::Always);
+    }
+
+    #[test]
+    fn test_parse_color_never() {
+        let cli = Cli::try_parse_from(["apc", "--color", "never", "detect"]).expect("parse");
+        assert_eq!(cli.color, ColorChoice::Never);
+    }
+
+    #[test]
+    fn test_parse_color_auto_default() {
+        let cli = Cli::try_parse_from(["apc", "detect"]).expect("parse");
+        assert_eq!(cli.color, ColorChoice::Auto);
+    }
+
+    #[test]
+    fn test_parse_no_subcommand() {
+        let cli = Cli::try_parse_from(["apc"]).expect("parse");
+        assert!(cli.command.is_none());
+    }
+
+    #[test]
+    fn test_parse_short_verbose() {
+        let cli = Cli::try_parse_from(["apc", "-v", "detect"]).expect("parse");
+        assert!(cli.verbose);
+    }
+
+    #[test]
+    fn test_parse_short_quiet() {
+        let cli = Cli::try_parse_from(["apc", "-q", "detect"]).expect("parse");
+        assert!(cli.quiet);
+    }
+
+    // =========================================================================
+    // ColorChoice tests
+    // =========================================================================
+
+    #[test]
+    fn test_color_choice_default() {
+        assert_eq!(ColorChoice::default(), ColorChoice::Auto);
+    }
+
+    #[test]
+    fn test_color_choice_debug() {
+        let debug_str = format!("{:?}", ColorChoice::Always);
+        assert_eq!(debug_str, "Always");
+    }
+
+    #[test]
+    fn test_color_choice_eq() {
+        assert_eq!(ColorChoice::Always, ColorChoice::Always);
+        assert_ne!(ColorChoice::Always, ColorChoice::Never);
+    }
+
+    // =========================================================================
+    // Preset validation tests
+    // =========================================================================
+
+    #[test]
+    fn test_all_valid_presets_accepted() {
+        for preset in ["python", "node", "rust", "go"] {
+            let result = Cli::try_parse_from(["apc", "init", "--preset", preset]);
+            assert!(result.is_ok(), "Preset '{}' should be accepted", preset);
+        }
+    }
+
+    #[test]
+    fn test_all_valid_modes_accepted() {
+        for mode in ["human", "agent", "ci"] {
+            let result = Cli::try_parse_from(["apc", "run", "--mode", mode]);
+            assert!(result.is_ok(), "Mode '{}' should be accepted", mode);
+        }
     }
 }
