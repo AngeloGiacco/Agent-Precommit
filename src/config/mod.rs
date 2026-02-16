@@ -121,6 +121,57 @@ impl Config {
             });
         }
 
+        // Validate that checks referenced in human mode exist in [checks]
+        for check_name in &self.human.checks {
+            if !self.checks.contains_key(check_name) {
+                return Err(Error::ConfigInvalid {
+                    field: "human.checks".to_string(),
+                    message: format!(
+                        "Check '{}' is referenced but not defined in [checks]",
+                        check_name
+                    ),
+                });
+            }
+        }
+
+        // Validate that checks referenced in agent mode exist in [checks]
+        for check_name in &self.agent.checks {
+            if !self.checks.contains_key(check_name) {
+                return Err(Error::ConfigInvalid {
+                    field: "agent.checks".to_string(),
+                    message: format!(
+                        "Check '{}' is referenced but not defined in [checks]",
+                        check_name
+                    ),
+                });
+            }
+        }
+
+        // Validate that checks in parallel groups are also in agent.checks
+        for (group_idx, group) in self.agent.parallel_groups.iter().enumerate() {
+            for check_name in group {
+                if !self.agent.checks.contains(check_name) {
+                    return Err(Error::ConfigInvalid {
+                        field: format!("agent.parallel_groups[{}]", group_idx),
+                        message: format!(
+                            "Check '{}' is in a parallel group but not in agent.checks",
+                            check_name
+                        ),
+                    });
+                }
+            }
+        }
+
+        // Validate that check commands are non-empty
+        for (name, check) in &self.checks {
+            if check.run.trim().is_empty() {
+                return Err(Error::ConfigInvalid {
+                    field: format!("checks.{}.run", name),
+                    message: "Check command cannot be empty".to_string(),
+                });
+            }
+        }
+
         Ok(())
     }
 
@@ -347,6 +398,16 @@ fn default_checks() -> HashMap<String, CheckConfig> {
                 file_exists: Some(".pre-commit-config.yaml".to_string()),
                 ..Default::default()
             }),
+            env: HashMap::new(),
+        },
+    );
+
+    checks.insert(
+        "test-unit".to_string(),
+        CheckConfig {
+            run: "echo 'No test command configured. Use apc init --preset <lang> or define checks.test-unit.run in your config.'".to_string(),
+            description: "Run unit tests (configure with a preset or custom command)".to_string(),
+            enabled_if: None,
             env: HashMap::new(),
         },
     );
@@ -681,8 +742,7 @@ mod tests {
     }
 
     #[test]
-    fn test_check_with_empty_run_is_valid() {
-        // Empty run commands are allowed (they might be placeholders)
+    fn test_check_with_empty_run_is_rejected() {
         let mut config = Config::default();
         config.checks.insert(
             "placeholder-check".to_string(),
@@ -694,11 +754,59 @@ mod tests {
             },
         );
         config.human.checks.push("placeholder-check".to_string());
-        // Current implementation allows empty run commands
-        // Validation focuses on timeout parsing
         let result = config.validate();
-        // This tests that the config doesn't crash - actual behavior may vary
-        drop(result);
+        assert!(result.is_err());
+        let err_msg = result.expect_err("should fail for empty run").to_string();
+        assert!(err_msg.contains("cannot be empty"));
+    }
+
+    #[test]
+    fn test_undefined_check_in_human_mode_is_rejected() {
+        let mut config = Config::default();
+        config.human.checks.push("nonexistent-check".to_string());
+        let result = config.validate();
+        assert!(result.is_err());
+        let err_msg = result
+            .expect_err("should fail for undefined check")
+            .to_string();
+        assert!(err_msg.contains("nonexistent-check"));
+        assert!(err_msg.contains("not defined"));
+    }
+
+    #[test]
+    fn test_undefined_check_in_agent_mode_is_rejected() {
+        let mut config = Config::default();
+        config.agent.checks.push("nonexistent-check".to_string());
+        let result = config.validate();
+        assert!(result.is_err());
+        let err_msg = result
+            .expect_err("should fail for undefined check")
+            .to_string();
+        assert!(err_msg.contains("nonexistent-check"));
+        assert!(err_msg.contains("not defined"));
+    }
+
+    #[test]
+    fn test_parallel_group_check_not_in_agent_checks_rejected() {
+        let mut config = Config::default();
+        config.checks.insert(
+            "orphan-check".to_string(),
+            CheckConfig {
+                run: "echo orphan".to_string(),
+                description: "Orphan".to_string(),
+                enabled_if: None,
+                env: HashMap::new(),
+            },
+        );
+        // Add to parallel groups but NOT to agent.checks
+        config.agent.parallel_groups = vec![vec!["orphan-check".to_string()]];
+        let result = config.validate();
+        assert!(result.is_err());
+        let err_msg = result
+            .expect_err("should fail for orphan parallel group check")
+            .to_string();
+        assert!(err_msg.contains("orphan-check"));
+        assert!(err_msg.contains("parallel group"));
     }
 
     #[test]
@@ -757,6 +865,30 @@ mod tests {
     fn test_preset_invalid_falls_back_to_default() {
         let config = Config::for_preset("invalid_preset");
         // Should fall back to default
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_preset_python_validates() {
+        let config = Config::for_preset("python");
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_preset_rust_validates() {
+        let config = Config::for_preset("rust");
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_preset_node_validates() {
+        let config = Config::for_preset("node");
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_preset_go_validates() {
+        let config = Config::for_preset("go");
         assert!(config.validate().is_ok());
     }
 
@@ -1027,6 +1159,241 @@ description = "Test"
         let config = Config::default();
         let debug_str = format!("{:?}", config);
         assert!(debug_str.contains("Config"));
+    }
+
+    // =========================================================================
+    // Config deserialization edge case tests
+    // =========================================================================
+
+    #[test]
+    fn test_deserialize_empty_toml() {
+        let config: Config = toml::from_str("").expect("empty toml should use defaults");
+        assert!(!config.human.checks.is_empty());
+        assert!(!config.agent.checks.is_empty());
+    }
+
+    #[test]
+    fn test_deserialize_partial_config_only_human() {
+        let toml_str = r#"
+[human]
+checks = ["custom-check"]
+timeout = "10s"
+
+[checks.custom-check]
+run = "echo custom"
+description = "Custom"
+"#;
+        let config: Config = toml::from_str(toml_str).expect("parse partial config");
+        assert_eq!(config.human.checks, vec!["custom-check".to_string()]);
+        assert_eq!(config.human.timeout, "10s");
+        // Agent should use defaults
+        assert!(!config.agent.checks.is_empty());
+    }
+
+    #[test]
+    fn test_deserialize_partial_config_only_agent() {
+        let toml_str = r#"
+[agent]
+checks = ["my-lint"]
+timeout = "20m"
+fail_fast = true
+
+[checks.my-lint]
+run = "cargo clippy"
+description = "Lint"
+"#;
+        let config: Config = toml::from_str(toml_str).expect("parse partial config");
+        assert_eq!(config.agent.checks, vec!["my-lint".to_string()]);
+        assert_eq!(config.agent.timeout, "20m");
+        assert!(config.agent.fail_fast);
+        // Human should use defaults
+        assert!(!config.human.checks.is_empty());
+    }
+
+    #[test]
+    fn test_deserialize_check_with_all_fields() {
+        let toml_str = r#"
+[human]
+checks = ["full-check"]
+timeout = "30s"
+
+[agent]
+checks = []
+timeout = "15m"
+
+[checks.full-check]
+run = "cargo test"
+description = "Full test suite"
+
+[checks.full-check.enabled_if]
+file_exists = "Cargo.toml"
+dir_exists = "src"
+command_exists = "cargo"
+
+[checks.full-check.env]
+RUST_LOG = "debug"
+CI = "true"
+"#;
+        let config: Config = toml::from_str(toml_str).expect("parse full check config");
+        let check = config.checks.get("full-check").expect("check exists");
+        assert_eq!(check.run, "cargo test");
+        assert_eq!(check.description, "Full test suite");
+
+        let condition = check.enabled_if.as_ref().expect("condition exists");
+        assert_eq!(condition.file_exists, Some("Cargo.toml".to_string()));
+        assert_eq!(condition.dir_exists, Some("src".to_string()));
+        assert_eq!(condition.command_exists, Some("cargo".to_string()));
+
+        assert_eq!(check.env.get("RUST_LOG"), Some(&"debug".to_string()));
+        assert_eq!(check.env.get("CI"), Some(&"true".to_string()));
+    }
+
+    #[test]
+    fn test_deserialize_parallel_groups() {
+        let toml_str = r#"
+[human]
+checks = []
+timeout = "30s"
+
+[agent]
+checks = ["lint", "test", "build"]
+timeout = "15m"
+parallel_groups = [["lint", "test"], ["build"]]
+
+[checks.lint]
+run = "cargo clippy"
+description = "Lint"
+
+[checks.test]
+run = "cargo test"
+description = "Test"
+
+[checks.build]
+run = "cargo build"
+description = "Build"
+"#;
+        let config: Config = toml::from_str(toml_str).expect("parse parallel groups");
+        assert_eq!(config.agent.parallel_groups.len(), 2);
+        assert_eq!(config.agent.parallel_groups[0], vec!["lint", "test"]);
+        assert_eq!(config.agent.parallel_groups[1], vec!["build"]);
+    }
+
+    #[test]
+    fn test_deserialize_detection_config() {
+        let toml_str = r#"
+[detection]
+mode = "agent"
+agent_env_vars = ["MY_CUSTOM_VAR", "ANOTHER_VAR"]
+"#;
+        let config: Config = toml::from_str(toml_str).expect("parse detection config");
+        assert_eq!(config.detection.mode, Some("agent".to_string()));
+        assert_eq!(config.detection.agent_env_vars.len(), 2);
+    }
+
+    #[test]
+    fn test_deserialize_integration_config() {
+        let toml_str = r#"
+[integration]
+pre_commit = true
+pre_commit_path = "custom/.pre-commit-config.yaml"
+"#;
+        let config: Config = toml::from_str(toml_str).expect("parse integration config");
+        assert!(config.integration.pre_commit);
+        assert_eq!(
+            config.integration.pre_commit_path,
+            "custom/.pre-commit-config.yaml"
+        );
+    }
+
+    #[test]
+    fn test_deserialize_multiline_command() {
+        let toml_str = r#"
+[human]
+checks = ["multi"]
+timeout = "30s"
+
+[agent]
+checks = []
+timeout = "15m"
+
+[checks.multi]
+run = """
+echo step1
+echo step2
+echo step3
+"""
+description = "Multi-line command"
+"#;
+        let config: Config = toml::from_str(toml_str).expect("parse multiline command");
+        let check = config.checks.get("multi").expect("check exists");
+        assert!(check.run.contains("step1"));
+        assert!(check.run.contains("step2"));
+        assert!(check.run.contains("step3"));
+    }
+
+    #[test]
+    fn test_load_from_file() {
+        let temp = tempfile::TempDir::new().expect("create temp dir");
+        let config_path = temp.path().join("agent-precommit.toml");
+
+        let toml_str = r#"
+[human]
+checks = ["echo-test"]
+timeout = "30s"
+
+[agent]
+checks = []
+timeout = "15m"
+
+[checks.echo-test]
+run = "echo hello"
+description = "Echo test"
+"#;
+        std::fs::write(&config_path, toml_str).expect("write config");
+
+        let config = Config::load_from(&config_path).expect("load config");
+        assert_eq!(config.human.checks, vec!["echo-test".to_string()]);
+    }
+
+    #[test]
+    fn test_load_from_invalid_toml() {
+        let temp = tempfile::TempDir::new().expect("create temp dir");
+        let config_path = temp.path().join("agent-precommit.toml");
+        std::fs::write(&config_path, "this is not valid toml [[[").expect("write");
+
+        let result = Config::load_from(&config_path);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_load_from_nonexistent_file() {
+        let result = Config::load_from(std::path::Path::new("/nonexistent/config.toml"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_check_config_from_command() {
+        let check = CheckConfig::from_command("cargo test".to_string());
+        assert_eq!(check.run, "cargo test");
+        assert_eq!(check.description, "cargo test");
+        assert!(check.enabled_if.is_none());
+        assert!(check.env.is_empty());
+    }
+
+    #[test]
+    fn test_load_from_validates_config() {
+        let temp = tempfile::TempDir::new().expect("create temp dir");
+        let config_path = temp.path().join("agent-precommit.toml");
+
+        // Valid TOML but invalid config (bad timeout)
+        let toml_str = r#"
+[human]
+timeout = "invalid_timeout"
+"#;
+        std::fs::write(&config_path, toml_str).expect("write");
+
+        let result = Config::load_from(&config_path);
+        assert!(result.is_err());
     }
 
     // =========================================================================

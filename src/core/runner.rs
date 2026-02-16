@@ -782,4 +782,268 @@ mod tests {
         assert!(parse_duration("1s").is_some());
         assert!(parse_duration("999999s").is_some());
     }
+
+    // =========================================================================
+    // Runner execution tests (with real command execution)
+    // =========================================================================
+
+    fn test_config_with_checks(checks: Vec<(&str, &str, &str)>) -> Config {
+        let mut config = Config::default();
+        config.human.checks = Vec::new();
+        config.agent.checks = Vec::new();
+
+        for (name, cmd, mode) in checks {
+            config.checks.insert(
+                name.to_string(),
+                CheckConfig {
+                    run: cmd.to_string(),
+                    description: name.to_string(),
+                    enabled_if: None,
+                    env: HashMap::new(),
+                },
+            );
+            match mode {
+                "human" => config.human.checks.push(name.to_string()),
+                "agent" => config.agent.checks.push(name.to_string()),
+                "both" => {
+                    config.human.checks.push(name.to_string());
+                    config.agent.checks.push(name.to_string());
+                },
+                _ => {},
+            }
+        }
+
+        config
+    }
+
+    #[tokio::test]
+    async fn test_runner_run_empty_checks() {
+        let config = test_config_with_checks(vec![]);
+        let runner = Runner::new(config);
+
+        let result = runner.run(Mode::Human).await;
+        assert!(result.is_ok());
+        let run_result = result.expect("should succeed");
+        assert!(run_result.success());
+        assert_eq!(run_result.checks.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_runner_run_passing_check() {
+        let config = test_config_with_checks(vec![("echo-test", "echo hello", "human")]);
+        let runner = Runner::new(config);
+
+        let result = runner.run(Mode::Human).await;
+        assert!(result.is_ok());
+        let run_result = result.expect("should succeed");
+        assert!(run_result.success());
+        assert_eq!(run_result.passed_count(), 1);
+        assert_eq!(run_result.failed_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_runner_run_failing_check() {
+        let config = test_config_with_checks(vec![("fail-test", "exit 1", "human")]);
+        let runner = Runner::new(config);
+
+        let result = runner.run(Mode::Human).await;
+        assert!(result.is_ok());
+        let run_result = result.expect("should complete");
+        assert!(!run_result.success());
+        assert_eq!(run_result.failed_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_runner_run_multiple_checks_all_pass() {
+        let config = test_config_with_checks(vec![
+            ("check1", "echo one", "human"),
+            ("check2", "echo two", "human"),
+            ("check3", "echo three", "human"),
+        ]);
+        let runner = Runner::new(config);
+
+        let result = runner.run(Mode::Human).await;
+        assert!(result.is_ok());
+        let run_result = result.expect("should succeed");
+        assert!(run_result.success());
+        assert_eq!(run_result.passed_count(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_runner_run_mixed_pass_fail() {
+        let config = test_config_with_checks(vec![
+            ("pass", "echo ok", "agent"),
+            ("fail", "exit 1", "agent"),
+        ]);
+        let runner = Runner::new(config);
+
+        let result = runner.run(Mode::Agent).await;
+        assert!(result.is_ok());
+        let run_result = result.expect("should complete");
+        assert!(!run_result.success());
+        assert_eq!(run_result.passed_count(), 1);
+        assert_eq!(run_result.failed_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_runner_run_single_check() {
+        let config = test_config_with_checks(vec![
+            ("check1", "echo one", "human"),
+            ("check2", "echo two", "human"),
+        ]);
+        let runner = Runner::new(config);
+
+        let result = runner.run_single("check1", Mode::Human).await;
+        assert!(result.is_ok());
+        let check_result = result.expect("should succeed");
+        assert!(check_result.passed);
+        assert_eq!(check_result.name, "check1");
+    }
+
+    #[tokio::test]
+    async fn test_runner_run_single_nonexistent() {
+        let config = test_config_with_checks(vec![]);
+        let runner = Runner::new(config);
+
+        let result = runner.run_single("nonexistent", Mode::Human).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_runner_human_fail_fast() {
+        let mut config = test_config_with_checks(vec![
+            ("fail-first", "exit 1", "human"),
+            ("never-reached", "echo should-not-run", "human"),
+        ]);
+        config.human.fail_fast = true;
+        let runner = Runner::new(config);
+
+        let result = runner.run(Mode::Human).await;
+        assert!(result.is_ok());
+        let run_result = result.expect("should complete");
+        // With fail_fast, only the first check runs
+        assert_eq!(run_result.checks.len(), 1);
+        assert!(!run_result.success());
+    }
+
+    #[tokio::test]
+    async fn test_runner_check_with_env_vars() {
+        let mut config = Config::default();
+        config.human.checks = vec!["env-check".to_string()];
+        config.agent.checks = Vec::new();
+
+        let mut env = HashMap::new();
+        env.insert("MY_TEST_VALUE".to_string(), "hello_world".to_string());
+
+        config.checks.insert(
+            "env-check".to_string(),
+            CheckConfig {
+                run: "test \"$MY_TEST_VALUE\" = \"hello_world\"".to_string(),
+                description: "env check".to_string(),
+                enabled_if: None,
+                env,
+            },
+        );
+
+        let runner = Runner::new(config);
+        let result = runner.run(Mode::Human).await;
+        assert!(result.is_ok());
+        let run_result = result.expect("should succeed");
+        assert!(run_result.success());
+    }
+
+    #[tokio::test]
+    async fn test_runner_skips_disabled_check() {
+        let mut config = Config::default();
+        config.human.checks = vec!["conditional-check".to_string()];
+        config.agent.checks = Vec::new();
+
+        config.checks.insert(
+            "conditional-check".to_string(),
+            CheckConfig {
+                run: "echo should-not-run".to_string(),
+                description: "conditional".to_string(),
+                enabled_if: Some(crate::config::EnabledCondition {
+                    command_exists: Some("definitely_not_a_real_command_99999".to_string()),
+                    file_exists: None,
+                    dir_exists: None,
+                }),
+                env: HashMap::new(),
+            },
+        );
+
+        let runner = Runner::new(config);
+        let result = runner.run(Mode::Human).await;
+        assert!(result.is_ok());
+        let run_result = result.expect("should succeed");
+        assert!(run_result.success());
+        assert_eq!(run_result.skipped_count(), 1);
+        assert_eq!(run_result.passed_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_runner_mode_selects_correct_checks() {
+        let config = test_config_with_checks(vec![
+            ("human-only", "echo human", "human"),
+            ("agent-only", "echo agent", "agent"),
+        ]);
+        let runner = Runner::new(config);
+
+        // Human mode should only run human checks
+        let result = runner.run(Mode::Human).await.expect("should succeed");
+        assert_eq!(result.checks.len(), 1);
+        assert_eq!(result.checks[0].name, "human-only");
+
+        // Agent mode should only run agent checks
+        let result = runner.run(Mode::Agent).await.expect("should succeed");
+        assert_eq!(result.checks.len(), 1);
+        assert_eq!(result.checks[0].name, "agent-only");
+    }
+
+    #[tokio::test]
+    async fn test_runner_records_duration() {
+        let config = test_config_with_checks(vec![("sleep-check", "sleep 0.1", "human")]);
+        let runner = Runner::new(config);
+
+        let result = runner.run(Mode::Human).await.expect("should succeed");
+        // Overall duration should be at least 100ms
+        assert!(result.duration >= Duration::from_millis(50));
+        // Check duration should also be recorded
+        assert!(result.checks[0].output.duration >= Duration::from_millis(50));
+    }
+
+    // =========================================================================
+    // get_checks_for_mode tests
+    // =========================================================================
+
+    #[test]
+    fn test_get_checks_for_mode_human() {
+        let config = test_config_with_checks(vec![
+            ("h-check", "echo h", "human"),
+            ("a-check", "echo a", "agent"),
+        ]);
+        let runner = Runner::new(config);
+        let checks = runner.get_checks_for_mode(Mode::Human);
+        assert_eq!(checks, vec!["h-check".to_string()]);
+    }
+
+    #[test]
+    fn test_get_checks_for_mode_agent() {
+        let config = test_config_with_checks(vec![
+            ("h-check", "echo h", "human"),
+            ("a-check", "echo a", "agent"),
+        ]);
+        let runner = Runner::new(config);
+        let checks = runner.get_checks_for_mode(Mode::Agent);
+        assert_eq!(checks, vec!["a-check".to_string()]);
+    }
+
+    #[test]
+    fn test_get_checks_for_mode_ci_uses_agent_checks() {
+        let config = test_config_with_checks(vec![("a-check", "echo a", "agent")]);
+        let runner = Runner::new(config);
+        // CI mode uses the same checks as Agent mode
+        let checks = runner.get_checks_for_mode(Mode::Ci);
+        assert_eq!(checks, vec!["a-check".to_string()]);
+    }
 }
